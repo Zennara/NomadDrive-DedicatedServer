@@ -159,8 +159,11 @@ by only 0.0000726 meters vertically after settling, with identical X/Z coordinat
 Keyboard taps could operate menus and chat, but the available UI automation API
 does not expose held movement keys. Driving, picking up items, attaching parts,
 and applying paint/wash strokes have not been exercised by the operator. The
-client and test host were left running for Keagan's gameplay handoff at this
-checkpoint. This is a temporary acceptance session, not a production deployment.
+client and test host were initially left running for Keagan's gameplay handoff.
+Keagan deferred those checks. At 19:17 UTC on November 12, a final verified backup
+completed, graceful shutdown saved successfully, and process inspection confirmed
+the isolated host had exited. The normal Steam client was left open. The remaining
+checks below are still untested. No production server was deployed.
 
 ### Remaining acceptance checks
 

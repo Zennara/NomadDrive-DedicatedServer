@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "serverVersion": "0.1.0.2",
+  "serverVersion": "0.2.0.3",
   "releaseChannel": "preview",
   "game": {
     "name": "Nomad Drive",
@@ -19,6 +19,7 @@
     "verifiedOn": "2026-11-12",
     "details": "docs/VALIDATION.md",
     "remaining": [
+      "Live spawn-reference handover, returning players, and simultaneous joins",
       "Driving, item pickup, and vehicle attachment/removal",
       "Nonempty inventory and paint/wash persistence",
       "Imported host inventory and position restoration",

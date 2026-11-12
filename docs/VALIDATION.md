@@ -1,12 +1,28 @@
 # Validation
 
-Status: preview 0.1.0.2. Host lifecycle, public discovery,
-vanilla joining, visible server chat, and rejoining after restart verified.
-Vehicle, item, paint, and imported-player persistence checks remain outstanding.
+Status: preview 0.2.0.3. Previous builds verified host lifecycle, public discovery,
+vanilla joining, visible server chat, and rejoining after restart. The new spawn
+policy still needs live multiplayer acceptance. Vehicle, item, paint, and
+imported-player persistence checks remain outstanding.
 
-The preview version replaces the unpublished local 1.x version labels. It adds
-release metadata and rules; the runtime findings below were collected on the
-same hosting behavior before that version-label change.
+Preview 0.1.0.2 replaced the unpublished local 1.x version labels and added
+release metadata and rules. Preview 0.2.0.3 changes ordinary joining to use the
+longest-connected human as the spawn reference, including returning players.
+
+## Spawn-reference change (0.2.0.3)
+
+The production connection-order helper is linked into the test suite. All 39
+checks pass, including handover, returning connections, recycled IDs, duplicate
+registration, unavailable players, self-exclusion, and empty-server selection.
+The plugin and supervisor build with zero warnings/errors against the pinned
+game. Server transforms are seeded before sending initial-spawn RPCs so another
+queued join cannot use the previous player's uninitialized zero position.
+These checks do not establish live client placement or handover.
+
+The changed plugin created a private test world, reached ready with zero human
+players, and completed a saved shutdown on November 12, 2026. This exercises
+Harmony patch installation and host lifecycle, not the human spawn path. Live
+simultaneous joins, delayed clients, and reference handover remain unverified.
 
 Verified game input: Steam build 26391437, Unity 6000.0.73f1.
 `Assembly-CSharp.dll` SHA-256:
@@ -159,6 +175,8 @@ slot. The client showed its normal lost-host dialog, then rediscovered the publi
 lobby and rejoined successfully. Restart creates a new lobby join code; the client
 does not automatically reconnect. The returning player's saved position differed
 by only 0.0000726 meters vertically after settling, with identical X/Z coordinates.
+That position check predates 0.2.0.3, which replaces individual saved-position
+spawning with the longest-connected human as the ordinary spawn reference.
 
 Keyboard taps could operate menus and chat, but the available UI automation API
 does not expose held movement keys. Driving, picking up items, attaching parts,
@@ -171,6 +189,8 @@ checks below are still untested. No production server was deployed.
 
 ### Remaining acceptance checks
 
+- Live spawn-reference handover, returning-player placement, and simultaneous joins
+  under the 0.2.0.3 connection-order policy.
 - Driving, loot/inventory interaction, and vehicle attachment/removal.
 - Nonempty player inventory persistence through save, restart, and rejoin.
 - Imported host inventory and position restoration.

@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Diagnostics;
 using System.Text.Json;
 using NomadDrive.Server;
+using NomadDrive.DedicatedServer;
 
 if (args.SequenceEqual(["--registration-child"]))
 {
@@ -47,6 +48,40 @@ async Task<(int ExitCode, string Output, string Error)> Cli(params string[] argu
     finally { Console.SetOut(output); Console.SetError(error); }
 }
 
+await Check("spawn reference follows arrival order rather than recycled IDs", () => Sync(() =>
+{
+    var order = new ConnectionOrder<TestConnection>();
+    var first = new TestConnection(90);
+    var second = new TestConnection(2);
+    order.Add(first); order.Add(second); order.Add(first);
+    Require(ReferenceEquals(order.FirstEligible(_ => true), first), "Oldest connection lost priority.");
+    Require(order.Snapshot().Length == 2, "Duplicate registration added an entry.");
+    order.Remove(first);
+    Require(ReferenceEquals(order.FirstEligible(_ => true), second), "Disconnect did not hand over.");
+    var returning = new TestConnection(90);
+    order.Add(returning);
+    Require(ReferenceEquals(order.FirstEligible(_ => true), second), "Returning player reclaimed priority.");
+    order.Remove(second);
+    var recycled = new TestConnection(2);
+    order.Add(recycled);
+    order.Remove(second);
+    Require(ReferenceEquals(order.FirstEligible(_ => true), returning), "Recycled ID changed arrival order.");
+    Require(order.Snapshot().Contains(recycled), "Old disconnect removed a new connection.");
+}));
+await Check("spawn reference skips unavailable players and the joining player", () => Sync(() =>
+{
+    var order = new ConnectionOrder<TestConnection>();
+    var loading = new TestConnection(1);
+    var joining = new TestConnection(2);
+    var active = new TestConnection(3);
+    order.Add(loading); order.Add(joining); order.Add(active);
+    Require(ReferenceEquals(order.FirstEligible(c => c != loading && c != joining), active), "Ineligible player selected.");
+    order.Remove(active);
+    Require(order.FirstEligible(c => c != loading && c != joining) == null, "Missing reference did not permit fallback.");
+    Require(order.Snapshot().SequenceEqual(new[] { loading, joining }), "Pending admission order changed.");
+    order.Remove(loading); order.Remove(joining);
+    Require(order.FirstEligible(_ => true) == null, "Empty session retained a reference.");
+}));
 await Check("config rejects unknown properties and case mistakes", () => Sync(() =>
 {
     var path = Path.Combine(root, "unknown.json");
@@ -493,6 +528,8 @@ await Check("sharing violation polling is bounded while startup guards fail clos
 
 Console.WriteLine($"{passed} passed; {failed} failed.");
 return failed == 0 ? 0 : 1;
+
+sealed record TestConnection(int Id);
 
 sealed class FakeClock : TimeProvider
 {

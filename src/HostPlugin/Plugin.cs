@@ -24,7 +24,7 @@ using Player = NomadDrive.Features.Player.Player;
 
 namespace NomadDrive.DedicatedServer;
 
-[BepInPlugin("odin.nomaddrive.dedicatedserver", "Nomad Drive Dedicated Server", "0.1.0")]
+[BepInPlugin("odin.nomaddrive.dedicatedserver", "Nomad Drive Dedicated Server", "0.2.0")]
 public sealed class Plugin : BaseUnityPlugin
 {
     internal static Plugin Instance;
@@ -40,6 +40,7 @@ public sealed class Plugin : BaseUnityPlugin
     private bool hasTravelAnchor;
     private bool closing;
     private readonly HashSet<NetworkConnectionToClient> pendingPlayers = new HashSet<NetworkConnectionToClient>();
+    private readonly ConnectionOrder<NetworkConnectionToClient> connectionOrder = new ConnectionOrder<NetworkConnectionToClient>();
     private float pollAt;
     private Transform observer;
     private WorldGenerator world;
@@ -169,7 +170,7 @@ public sealed class Plugin : BaseUnityPlugin
                 Logger.LogInfo("Server ready; join code " + ((IEOSLobbyManager)lobby).JoinCode);
             }
             if (ready && !closing)
-                foreach (var connection in pendingPlayers.ToArray())
+                foreach (var connection in connectionOrder.Snapshot().Where(c => pendingPlayers.Contains(c)))
                 {
                     pendingPlayers.Remove(connection);
                     if (NetworkServer.connections.TryGetValue(connection.connectionId, out var current) && ReferenceEquals(current, connection) && connection.identity == null)
@@ -197,8 +198,8 @@ public sealed class Plugin : BaseUnityPlugin
             observer.position = ImportAnchor.HasValue ? FloatingOriginManager.ToRenderWorld(ImportAnchor.Value) : world.PlayerSpawnPoint;
             world.SetTerrainObserver(observer);
         }
-        var players = NetworkServer.connections.Values.Where(c => !(c is LocalConnectionToClient) && c.identity != null)
-            .OrderBy(c => c.connectionId).Select(c => c.identity.GetComponent<Player>()).Where(p => p != null).ToArray();
+        var players = connectionOrder.Snapshot().Where(IsActiveHuman)
+            .Select(c => c.identity.GetComponent<Player>()).ToArray();
         var focuses = players.Select(Focus).ToArray();
         if (players.Length > 0) { observer.position = focuses[0].position; hasTravelAnchor = true; }
         else if (!hasTravelAnchor) observer.position = world.PlayerSpawnPoint;
@@ -280,10 +281,37 @@ public sealed class Plugin : BaseUnityPlugin
 
     internal static Vector3 SpawnPoint(Player player, WorldGenerator world)
     {
-        if (Instance.positions.players.TryGetValue(player.EosProductUserId ?? "", out var point)) return FloatingOriginManager.ToRenderWorld(point.Vector);
-        var other = NetworkServer.connections.Values.Where(c => !(c is LocalConnectionToClient) && c.identity != null && c.identity.netId != player.netId).OrderBy(c => c.connectionId).FirstOrDefault();
-        if (other != null) return other.identity.transform.position + Vector3.up * 1.5f;
+        var reference = OldestPlayer(player);
+        if (reference != null)
+        {
+            // Use the game's ordinary near-host offset, substituting the oldest human.
+            var radius = (float)AccessTools.Field(typeof(MirrorNetworkManager), "nearHostSpawnRadius").GetValue(NetworkManager.singleton);
+            var offset = UnityEngine.Random.insideUnitCircle * radius;
+            return reference.transform.position + new Vector3(offset.x, 0f, offset.y);
+        }
         return Instance.hasTravelAnchor && Instance.positions.anchor != null ? FloatingOriginManager.ToRenderWorld(Instance.positions.anchor.Vector) : world.PlayerSpawnPoint;
+    }
+
+    private static bool IsActiveHuman(NetworkConnectionToClient connection) =>
+        !(connection is LocalConnectionToClient) &&
+        NetworkServer.connections.TryGetValue(connection.connectionId, out var current) && ReferenceEquals(current, connection) &&
+        connection.identity != null && connection.identity.GetComponent<Player>() != null;
+
+    internal static Player OldestPlayer(Player excluding = null)
+    {
+        var connection = Instance.connectionOrder.FirstEligible(c => IsActiveHuman(c) && c.identity.GetComponent<Player>() != excluding);
+        return connection == null ? null : connection.identity.GetComponent<Player>();
+    }
+
+    internal static void TrackConnection(NetworkConnectionToClient connection)
+    {
+        if (!(connection is LocalConnectionToClient)) Instance.connectionOrder.Add(connection);
+    }
+
+    internal static void ForgetConnection(NetworkConnectionToClient connection)
+    {
+        Instance.pendingPlayers.Remove(connection);
+        Instance.connectionOrder.Remove(connection);
     }
 
     internal static Transform Focus(Player player) => player.SeatedVehicleFocusTransform ?? player.DownedFocusTransform ?? player.transform;
@@ -291,6 +319,7 @@ public sealed class Plugin : BaseUnityPlugin
     internal static bool AdmitPlayer(NetworkConnectionToClient connection)
     {
         if (connection is LocalConnectionToClient) return false;
+        TrackConnection(connection);
         if (Instance.failed || Instance.closing) { connection.Disconnect(); return false; }
         if (Instance.ready) return true;
         Instance.pendingPlayers.Add(connection);
@@ -411,6 +440,18 @@ internal static class LargeLobbyVoice
     }
 }
 
+[HarmonyPatch(typeof(MirrorNetworkManager), nameof(MirrorNetworkManager.OnServerConnect))]
+internal static class RecordHumanConnection
+{
+    static void Postfix(NetworkConnectionToClient conn) => Plugin.TrackConnection(conn);
+}
+
+[HarmonyPatch(typeof(MirrorNetworkManager), nameof(MirrorNetworkManager.OnServerDisconnect))]
+internal static class RemoveHumanConnection
+{
+    static void Prefix(NetworkConnectionToClient conn) => Plugin.ForgetConnection(conn);
+}
+
 [HarmonyPatch(typeof(MirrorNetworkManager), nameof(MirrorNetworkManager.OnServerAddPlayer))]
 internal static class NoHostAvatar
 {
@@ -420,7 +461,14 @@ internal static class NoHostAvatar
         if (conn is LocalConnectionToClient || conn.identity == null) return;
         var world = UnityEngine.Object.FindAnyObjectByType<WorldGenerator>();
         var player = conn.identity.GetComponent<Player>();
-        if (world != null && player != null) player.ServerApplyInitialSpawnNearHost(Plugin.SpawnPoint(player, world));
+        if (world != null && player != null)
+        {
+            var position = Plugin.SpawnPoint(player, world);
+            // The vanilla method only sends a TargetRpc. Seed the server transform
+            // before another queued admission can use this player as its reference.
+            player.transform.position = position;
+            player.ServerApplyInitialSpawnNearHost(position);
+        }
     }
 }
 
@@ -468,8 +516,7 @@ internal static class RemoteOriginFocus
 {
     static bool Prefix(ref Vector3 focus, ref bool __result)
     {
-        var player = NetworkServer.connections.Values.Where(c => !(c is LocalConnectionToClient) && c.identity != null)
-            .OrderBy(c => c.connectionId).Select(c => c.identity.GetComponent<Player>()).FirstOrDefault(p => p != null);
+        var player = Plugin.OldestPlayer();
         __result = player != null;
         if (player != null) focus = Plugin.Focus(player).position;
         return false;

@@ -42,6 +42,20 @@ NomadDrive.Server run --config C:/Servers/Nomad/server.json
 
 World settings apply when creating a world. Subsequent starts resume the slot recorded in `dataDirectory/world.json`. Importing a world preserves that world's settings. A missing selected slot is an error; the supervisor never silently replaces it with a new world. The game validates imported save format during startup.
 
+## Player spawning
+
+The longest-connected human player is the spawn reference. New and returning
+players spawn near that player using the game's normal near-host offset. When
+that player disconnects, the next-longest-connected player takes over. Rejoining
+puts a player at the end of the connection order. This grants no administrative
+permissions and does not transfer the actual server host.
+
+When nobody else is online, the first player spawns at the last world anchor
+(retained across completed saves and restarts), or the generated starting point
+for a new world. Connection order starts fresh after a server restart. Individual
+saved positions no longer override ordinary joining. The game's separate
+restoration of downed/chicken players remains in effect.
+
 ## Public lobbies
 
 Set `lobby.public` to `true` to advertise through the game's public lobby browser.

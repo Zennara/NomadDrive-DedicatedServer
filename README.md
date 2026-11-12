@@ -8,7 +8,7 @@ A working Windows graphics device is required. The process runs in the backgroun
 with a graphics context because the game's paint and restoration saves depend on
 GPU texture readback. No-graphics mode is rejected to prevent losing those changes.
 
-**Preview 0.1.0.2.** Compilation and supervisor tests do not establish
+**Preview 0.2.0.3.** Compilation and supervisor tests do not establish
 vanilla-client compatibility. See [validation](docs/VALIDATION.md) for the actual
 runtime results and remaining checks before using a valuable world.
 

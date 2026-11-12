@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Supervisor/Supervisor.csproj" />
+    <Compile Include="../../src/HostPlugin/ConnectionOrder.cs" Link="ConnectionOrder.cs" />
   </ItemGroup>
 </Project>

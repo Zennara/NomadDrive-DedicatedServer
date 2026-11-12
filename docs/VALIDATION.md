@@ -1,7 +1,8 @@
 # Validation
 
-Status: local development candidate 1.0.1.1. Isolated host lifecycle verified;
-vanilla-client gameplay verification is still outstanding.
+Status: local development candidate 1.0.1.1. Host lifecycle, public discovery,
+vanilla joining, visible server chat, and rejoining after restart verified.
+Vehicle, item, paint, and imported-player persistence checks remain outstanding.
 
 Verified game input: Steam build 26391437, Unity 6000.0.73f1.
 `Assembly-CSharp.dll` SHA-256:
@@ -125,21 +126,51 @@ or ready session was established. Recovery was disabled and the process exited.
 SHA-256 comparison confirmed the source and imported damaged bytes were unchanged.
 This does not cover a readable save whose individual objects partially fail restore.
 
-Vanilla gameplay testing is pending a safe client choice. Starting the user's
+Starting the user's
 ordinary client can reconcile local and Steam Cloud saves from the main menu,
 before joining (`game.cs:92333`; `evilsave.cs:1187,1211,1226`). Changing only the
 Unity company/product storage path does not isolate the cloud account. An untouched
 client needs a separate test profile/account, or permission for normal cloud sync.
 A client patched only to isolate storage would need to be reported as modified.
 
+### Unmodified Steam client acceptance
+
+On November 12, 2026, Keagan authorized using his normal Steam client and normal
+cloud reconciliation. Before launch, all 12 local EvilSave files were archived and
+their SHA-256 hashes checked against the ZIP. That backup is retained outside
+scratch under `Documents/NomadDrive-Backups/2026-11-12-before-client-test/`.
+Keagan manually approved the Windows firewall prompt.
+
+The client ran from the original Steam installation. Its Assembly-CSharp hash
+matches the supported build above; no BepInEx directory or Doorstop winhttp.dll
+was present. The vanilla Join Game browser listed `Odin Public Test`. Clicking
+that row successfully joined the generated world. Two other public players also
+connected, bringing the host's observed count to three humans. Another player's
+movement was visible. Those other clients' installation contents were not checked.
+
+Scheduled backup start/completion messages and an administrative ten-second
+restart notice rendered in the vanilla chat UI. The manual restart completed its
+save, shut down the old process, launched a new process, and reopened the same
+slot. The client showed its normal lost-host dialog, then rediscovered the public
+lobby and rejoined successfully. Restart creates a new lobby join code; the client
+does not automatically reconnect. The returning player's saved position differed
+by only 0.0000726 meters vertically after settling, with identical X/Z coordinates.
+
+Keyboard taps could operate menus and chat, but the available UI automation API
+does not expose held movement keys. Driving, picking up items, attaching parts,
+and applying paint/wash strokes have not been exercised by the operator. The
+client and test host were left running for Keagan's gameplay handoff at this
+checkpoint. This is a temporary acceptance session, not a production deployment.
+
 ### Remaining acceptance checks
 
-- Public browser discovery, vanilla client join, driving, loot interaction, chat
-  warnings, and reconnect.
+- Driving, loot/inventory interaction, and vehicle attachment/removal.
+- Nonempty player inventory persistence through save, restart, and rejoin.
 - Imported host inventory and position restoration.
 - Player-driven paint/wash changes surviving save, restart, and rejoin.
 - Failed/partial imported restoration exercised against actual game data.
-- Multiple clients in separate terrain regions and extended play.
+- Multiple clients in separate terrain regions and extended play. Three simultaneous
+  human connections alone do not establish these behaviors.
 - Gameplay capacity above the default four players.
 
 Until recorded as passed below, these remain unverified.
@@ -159,7 +190,8 @@ Until recorded as passed below, these remain unverified.
 
 Manifest-verified cleanup removed approximately 8.33 GiB of superseded installers,
 incompatible libraries, extraction probes, build cache, and the obsolete runtime.
-All task-owned game processes were stopped. No public deployment was performed.
-Temporary public validation lobbies were opened and closed during the follow-up;
-no persistent public server was deployed. Follow-up fixtures and concise evidence
+Initial host-only test processes were stopped before client acceptance.
+Earlier temporary public validation lobbies were opened and closed; the later
+client acceptance handoff is described above. No persistent public server was
+deployed. Follow-up fixtures and concise evidence
 are retained under `E:/Odin/scratch/nomad-drive/public-acceptance/` for reproduction.

@@ -60,8 +60,9 @@ Replace the existing `lobby` section with this example, then restart the supervi
 The vanilla browser searches for public lobbies with the same game version.
 Visibility and password are independent: a public lobby can also have a password.
 The host identity can appear as one occupied slot even when no humans are connected.
-Public hosting has reached readiness in a live test; browser discovery and vanilla
-joining are still pending. See [validation](VALIDATION.md).
+Public browser discovery, an unmodified Steam client joining, visible server chat,
+and rejoining after a saved restart have passed live tests. Vehicle and inventory
+persistence checks remain open. See [validation](VALIDATION.md).
 
 ## Backups, restarts, and recovery
 

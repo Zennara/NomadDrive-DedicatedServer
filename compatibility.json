@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "serverVersion": "0.1.0.2",
+  "releaseChannel": "preview",
+  "game": {
+    "name": "Nomad Drive",
+    "version": "1.0.1",
+    "steamAppId": 2223980,
+    "steamBuildId": 26391437,
+    "unityVersion": "6000.0.73f1",
+    "assembly": "Assembly-CSharp.dll",
+    "assemblySha256": "6957F9A1180D811CA2AE1BB44748157D794FED5BEFD845290FD15E41FB54FFAF"
+  },
+  "loader": {
+    "name": "BepInEx",
+    "version": "5.4.23.6"
+  },
+  "validation": {
+    "verifiedOn": "2026-11-12",
+    "details": "docs/VALIDATION.md",
+    "remaining": [
+      "Driving, item pickup, and vehicle attachment/removal",
+      "Nonempty inventory and paint/wash persistence",
+      "Imported host inventory and position restoration",
+      "Readable saves with partial object restoration failures",
+      "Split-region multiplayer, extended play, and capacity testing"
+    ]
+  }
+}

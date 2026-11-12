@@ -1,8 +1,12 @@
 # Validation
 
-Status: local development candidate 1.0.1.1. Host lifecycle, public discovery,
+Status: preview 0.1.0.2. Host lifecycle, public discovery,
 vanilla joining, visible server chat, and rejoining after restart verified.
 Vehicle, item, paint, and imported-player persistence checks remain outstanding.
+
+The preview version replaces the unpublished local 1.x version labels. It adds
+release metadata and rules; the runtime findings below were collected on the
+same hosting behavior before that version-label change.
 
 Verified game input: Steam build 26391437, Unity 6000.0.73f1.
 `Assembly-CSharp.dll` SHA-256:

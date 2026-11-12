@@ -8,9 +8,13 @@ A working Windows graphics device is required. The process runs in the backgroun
 with a graphics context because the game's paint and restoration saves depend on
 GPU texture readback. No-graphics mode is rejected to prevent losing those changes.
 
-**Development build.** Compilation and supervisor tests do not establish
+**Preview 0.1.0.2.** Compilation and supervisor tests do not establish
 vanilla-client compatibility. See [validation](docs/VALIDATION.md) for the actual
 runtime results and remaining checks before using a valuable world.
+
+Target game: **Nomad Drive 1.0.1**, Steam build **26391437**. Exact game and loader
+compatibility is recorded in [compatibility.json](compatibility.json).
+See [release rules](docs/RELEASES.md) for versioning and tagged release policy.
 
 ## Setup
 

@@ -1,0 +1,9 @@
+---
+description: Four-part preview versions, exact game compatibility, and tagged releases
+alwaysApply: true
+---
+
+Follow the repository's `AGENTS.md` release rules and `docs/RELEASES.md` checklist.
+Previews use `0.x.x.x`. Every release must identify its exact supported game build
+in `compatibility.json` and its GitHub release notes. Never claim that a newer game
+build is compatible without checking its code and completing relevant tests.

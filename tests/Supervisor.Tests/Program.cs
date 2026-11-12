@@ -31,6 +31,21 @@ ServerConfig Config(string label)
 {
     return new ServerConfig { GameDirectory = Path.Combine(root, label, "game"), DataDirectory = Path.Combine(root, label, "data") };
 }
+async Task<(int ExitCode, string Output, string Error)> Cli(params string[] arguments)
+{
+    var output = Console.Out;
+    var error = Console.Error;
+    using var capturedOutput = new StringWriter();
+    using var capturedError = new StringWriter();
+    Console.SetOut(capturedOutput);
+    Console.SetError(capturedError);
+    try
+    {
+        var exitCode = await NomadDrive.Server.Program.Main(arguments);
+        return (exitCode, capturedOutput.ToString(), capturedError.ToString());
+    }
+    finally { Console.SetOut(output); Console.SetError(error); }
+}
 
 await Check("config rejects unknown properties and case mistakes", () => Sync(() =>
 {
@@ -48,6 +63,45 @@ await Check("config validates player, density, schedule and null boundaries", ()
     config.World.FoodDensity = 25; config.Restarts.WarningSeconds = [60, 60]; Throws<InvalidDataException>(() => config.Validate());
     config.Restarts.WarningSeconds = [60]; config.World = null!; Throws<InvalidDataException>(() => config.Validate());
 }));
+await Check("public lobby JSON loads and round-trips as public true", () => Sync(() =>
+{
+    var path = Path.Combine(root, "public.json");
+    File.WriteAllText(path, "{\"lobby\":{\"public\":true}}");
+    var config = ServerConfig.Load(path);
+    Require(config.Lobby.Public, "Public lobby request was not loaded.");
+    var serialized = JsonSerializer.Serialize(config, ServerConfig.Json);
+    using var document = JsonDocument.Parse(serialized);
+    Require(document.RootElement.GetProperty("lobby").GetProperty("public").GetBoolean(), "Public flag was lost or serialized under the wrong name.");
+    var roundTripPath = Path.Combine(root, "public-roundtrip.json");
+    File.WriteAllText(roundTripPath, serialized);
+    Require(ServerConfig.Load(roundTripPath).Lobby.Public, "Public flag was lost during round-trip.");
+}));
+await Check("CLI init refuses overwrite and produces a valid config", async () =>
+{
+    var path = Path.Combine(root, "cli-init", "server.json");
+    Require((await Cli("init", "--config", path)).ExitCode == 0, "CLI init failed.");
+    var original = File.ReadAllBytes(path);
+    Require((await Cli("validate", "--config", path)).ExitCode == 0, "Initialized config did not validate.");
+    var again = await Cli("init", "--config", path);
+    Require(again.ExitCode == 1 && again.Error.Contains("not overwritten", StringComparison.Ordinal), "Second init did not explain refusal.");
+    Require(original.SequenceEqual(File.ReadAllBytes(path)), "Existing config was overwritten.");
+});
+await Check("CLI rejects unknown duplicate and missing arguments before writing files", async () =>
+{
+    var path = Path.Combine(root, "invalid-cli.json");
+    foreach (var arguments in new[]
+    {
+        new[] { "init", "--config", path, "--unknown", "value" },
+        new[] { "init", "--config", path, "--config", path },
+        new[] { "init", "--config" },
+        new[] { "init", "--text", "unsupported" }
+    })
+    {
+        var result = await Cli(arguments);
+        Require(result.ExitCode == 1 && result.Error.Length > 0, "Invalid arguments were accepted.");
+        Require(!File.Exists(path), "Invalid CLI invocation wrote a file.");
+    }
+});
 await Check("no-graphics mode is rejected to protect paint and restoration saves", () => Sync(() =>
 {
     var config = Config("graphics");
@@ -67,6 +121,9 @@ await Check("chat templates reject unknown placeholders and oversized rendered w
     config.Restarts.WarningMessage = "Restart {remaining"; Throws<InvalidDataException>(() => config.Validate());
     config.Restarts.WarningMessage = new string('x', 245) + "{remaining}";
     config.Restarts.WarningSeconds = [21599]; Throws<InvalidDataException>(() => config.Validate());
+    config.Restarts.IntervalHours = 12; config.Restarts.WarningSeconds = [36000];
+    // 600 minutes fits but a delayed 35999 seconds does not.
+    Throws<InvalidDataException>(() => config.Validate());
     config.Restarts.WarningMessage = "Restart soon."; config.Validate();
     config.Restarts.StoppingMessage = null!; Throws<InvalidDataException>(() => config.Validate());
 }));
@@ -75,8 +132,10 @@ await Check("warning renderer substitutes only remaining and enforces final chat
     Require(ChatMessages.RenderWarning("Maintenance in {remaining}.", 300) == "Maintenance in 5 minutes.", "Minutes were not substituted.");
     Require(ChatMessages.RenderWarning("{remaining}", 60) == "1 minute", "Singular minute was not rendered.");
     Require(ChatMessages.RenderWarning("{remaining}", 10) == "10 seconds", "Seconds were not substituted.");
+    Require(ChatMessages.RenderWarning("{remaining}", 1) == "1 second", "Singular second was not rendered.");
     Require(ChatMessages.RenderWarning("Restart soon.", 10) == "Restart soon.", "Optional placeholder was required.");
     Throws<InvalidDataException>(() => ChatMessages.RenderWarning(new string('x', 245) + "{remaining}", 21599));
+    Throws<InvalidDataException>(() => ChatMessages.RenderWarning("{remaining}", 0));
 }));
 await Check("relative config paths resolve against the config directory", () => Sync(() =>
 {
@@ -293,6 +352,68 @@ await Check("backup and restart schedules fire once with warning thresholds", ()
     Require(schedule.Poll().Warnings.Length == 0, "Warning repeated.");
     clock.Advance(TimeSpan.FromMinutes(9)); Require(schedule.Poll().Warnings.SequenceEqual([60]), "Missed thresholds did not collapse to urgent warning.");
     clock.Advance(TimeSpan.FromMinutes(1)); Require(schedule.Poll().Restart && !schedule.Poll().Restart, "Restart repeated or missing.");
+}));
+await Check("delayed restart warning reports actual remaining time rather than crossed threshold", () => Sync(() =>
+{
+    var clock = new FakeClock(); var config = Config("delayedwarning");
+    var schedule = new MaintenanceSchedule(config, clock); schedule.Begin();
+    clock.Advance(TimeSpan.FromMinutes(350));
+    Require(schedule.Poll().Warnings.SequenceEqual([600]), "Initial threshold did not fire.");
+    clock.Advance(TimeSpan.FromMinutes(8));
+    var warning = schedule.Poll();
+    Require(warning.Warnings.SequenceEqual([120]), "Delayed five-minute threshold did not report the two minutes actually remaining.");
+    Require(ChatMessages.RenderWarning(config.Restarts.WarningMessage, warning.Warnings[0]) == "Server restart in 2 minutes.", "Rendered countdown was stale.");
+    Require(schedule.Poll().Warnings.Length == 0, "Crossed threshold was emitted twice.");
+}));
+await Check("multiple crossed warning thresholds collapse to one current rounded-up countdown", () => Sync(() =>
+{
+    var clock = new FakeClock(); var config = Config("crossedwarnings");
+    var schedule = new MaintenanceSchedule(config, clock); schedule.Begin();
+    clock.Advance(TimeSpan.FromHours(6) - TimeSpan.FromMilliseconds(3200));
+    var due = schedule.Poll();
+    Require(due.Warnings.SequenceEqual([4]) && !due.Restart, "Several crossed thresholds did not collapse to actual rounded-up seconds.");
+    Require(schedule.Poll().Warnings.Length == 0, "A stale warning burst followed the collapsed countdown.");
+}));
+await Check("warnings never fire before threshold or announce zero before the deadline", () => Sync(() =>
+{
+    var clock = new FakeClock(); var config = Config("warningboundary");
+    config.Restarts.WarningSeconds = [10];
+    var schedule = new MaintenanceSchedule(config, clock); schedule.Begin();
+    clock.Advance(TimeSpan.FromHours(6) - TimeSpan.FromMilliseconds(10100));
+    Require(schedule.Poll().Warnings.Length == 0, "Warning fired before its threshold.");
+    clock.Advance(TimeSpan.FromSeconds(10));
+    var due = schedule.Poll();
+    Require(due.Warnings.SequenceEqual([1]) && !due.Restart, "Fractional positive countdown must round up to one second.");
+    clock.Advance(TimeSpan.FromMilliseconds(100));
+    due = schedule.Poll();
+    Require(due.Restart && due.Warnings.Length == 0, "Deadline should restart without a zero-second warning.");
+}));
+await Check("disabled maintenance and disabled chat do not emit operations or warnings", () => Sync(() =>
+{
+    var clock = new FakeClock(); var config = Config("disabledmaintenance");
+    config.Backups.Enabled = false; config.Restarts.Enabled = false;
+    var schedule = new MaintenanceSchedule(config, clock); schedule.Begin();
+    clock.Advance(TimeSpan.FromHours(7));
+    var due = schedule.Poll();
+    Require(!due.Backup && !due.Restart && due.Warnings.Length == 0, "Disabled maintenance ran.");
+    config.Restarts.Enabled = true; config.Restarts.MessagesEnabled = false; schedule.Begin();
+    clock.Advance(TimeSpan.FromMinutes(355));
+    Require(schedule.Poll().Warnings.Length == 0, "Disabled restart chat emitted a warning.");
+    clock.Advance(TimeSpan.FromMinutes(5));
+    due = schedule.Poll();
+    Require(due.Restart && due.Warnings.Length == 0, "Disabling chat suppressed the actual restart or emitted a warning.");
+}));
+await Check("overdue schedule restarts once without stale countdown and resets next deadline", () => Sync(() =>
+{
+    var clock = new FakeClock(); var config = Config("overdueschedule");
+    var schedule = new MaintenanceSchedule(config, clock); schedule.Begin();
+    clock.Advance(TimeSpan.FromHours(7));
+    var due = schedule.Poll();
+    Require(due.Restart && due.Warnings.Length == 0, "Overdue restart emitted stale countdown warnings.");
+    due = schedule.Poll();
+    Require(!due.Restart && due.Warnings.Length == 0, "Overdue restart repeated immediately.");
+    clock.Advance(TimeSpan.FromMinutes(350));
+    Require(schedule.Poll().Warnings.SequenceEqual([600]), "Next cycle did not start from the rescheduled deadline.");
 }));
 await Check("IPC waits for matching atomic response", async () =>
 {

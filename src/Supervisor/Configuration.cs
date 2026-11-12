@@ -71,7 +71,13 @@ public sealed class ServerConfig
         ChatMessages.ValidateText(Restarts.RestartingMessage, "restarts.restartingMessage");
         ChatMessages.ValidateText(Restarts.StoppingMessage, "restarts.stoppingMessage");
         ChatMessages.ValidateWarningTemplate(Restarts.WarningMessage);
-        foreach (var seconds in Restarts.WarningSeconds!) ChatMessages.RenderWarning(Restarts.WarningMessage, seconds);
+        foreach (var seconds in Restarts.WarningSeconds!)
+        {
+            ChatMessages.RenderWarning(Restarts.WarningMessage, seconds);
+            // A delayed poll may render seconds instead of exact minutes. The
+            // threshold and the preceding second cover the longest text below it.
+            if (seconds > 1) ChatMessages.RenderWarning(Restarts.WarningMessage, seconds - 1);
+        }
         Range(Recovery!.MaxAttempts, 0, 100, "recovery.maxAttempts");
         Range(Recovery.WindowMinutes, 1, 10080, "recovery.windowMinutes");
         Range(Recovery.DelaySeconds, 1, 3600, "recovery.delaySeconds");
@@ -165,8 +171,9 @@ public static class ChatMessages
     public static string RenderWarning(string template, int seconds)
     {
         ValidateWarningTemplate(template);
+        if (seconds < 1) throw new InvalidDataException("Restart warnings require a positive number of seconds remaining.");
         var remaining = seconds % 60 == 0
-            ? $"{seconds / 60} minute{(seconds == 60 ? "" : "s")}" : $"{seconds} seconds";
+            ? $"{seconds / 60} minute{(seconds == 60 ? "" : "s")}" : $"{seconds} second{(seconds == 1 ? "" : "s")}";
         var result = template.Replace("{remaining}", remaining, StringComparison.Ordinal);
         ValidateText(result, "Rendered restarts.warningMessage");
         return result;

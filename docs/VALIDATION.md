@@ -1,6 +1,6 @@
 # Validation
 
-Status: local development candidate 1.0.0.0. Isolated host lifecycle verified;
+Status: local development candidate 1.0.1.1. Isolated host lifecycle verified;
 vanilla-client gameplay verification is still outstanding.
 
 Verified game input: Steam build 26391437, Unity 6000.0.73f1.
@@ -68,10 +68,14 @@ exceptions. GPU-backed paint persistence still needs an actual client test.
 
 On Windows, November 12, 2026:
 
-- Supervisor and plugin build with zero warnings/errors. All 29 supervisor tests
+- Supervisor and plugin build with zero warnings/errors. All 37 supervisor tests
   pass. Supervisor regression
   checks cover config, imports, locks, completed-save backups, retention, crash
   budgets, warning schedules, custom messages, and concurrent atomic IPC reads.
+  Follow-up coverage includes public JSON round-tripping, CLI input rejection and
+  overwrite protection, disabled schedules, overdue polls, and fractional countdowns.
+  A delayed-poll regression exposed stale restart warnings; countdowns now use
+  actual remaining time instead of the previously crossed threshold.
 - BepInEx loads the plugin. EOS device authentication and private lobby creation
   succeed without a Steam player host.
 - The host reaches readiness with zero human players, completed non-draft terrain,
@@ -100,7 +104,38 @@ Windows editor profile. Final validation uses only the exact editor profile.
 
 ## Required runtime checks
 
-- Vanilla client join, driving, loot interaction, chat warnings, and reconnect.
+### Public lobby and damaged-save follow-up
+
+On November 12, 2026, an isolated host configured with `lobby.public: true`,
+four human slots, and a test password reached world readiness with zero humans.
+It completed a scheduled backup, a manual backup, and a save-and-stop operation.
+This proves public-mode startup, not discovery or joining from a vanilla client.
+The staged 1.0.1.1 build then reopened the same world as a public lobby with an
+empty password, completed another verified backup, and saved and stopped cleanly.
+Both public runs reported zero humans. All task-owned game processes were stopped.
+
+The inspected game code publishes `game_mode=default`, `is_public=1`, and the
+game version. Its public browser searches for those same attributes, including
+an exact version match (`networking.cs:4627,5191,5203,5215` in the retained
+decompile). Public visibility and passwords are independent.
+
+A copied fixture containing real saved-world metadata and deliberately damaged
+`save.dat` bytes failed startup with `Cannot load saved world: Damaged`. No lobby
+or ready session was established. Recovery was disabled and the process exited.
+SHA-256 comparison confirmed the source and imported damaged bytes were unchanged.
+This does not cover a readable save whose individual objects partially fail restore.
+
+Vanilla gameplay testing is pending a safe client choice. Starting the user's
+ordinary client can reconcile local and Steam Cloud saves from the main menu,
+before joining (`game.cs:92333`; `evilsave.cs:1187,1211,1226`). Changing only the
+Unity company/product storage path does not isolate the cloud account. An untouched
+client needs a separate test profile/account, or permission for normal cloud sync.
+A client patched only to isolate storage would need to be reported as modified.
+
+### Remaining acceptance checks
+
+- Public browser discovery, vanilla client join, driving, loot interaction, chat
+  warnings, and reconnect.
 - Imported host inventory and position restoration.
 - Player-driven paint/wash changes surviving save, restart, and rejoin.
 - Failed/partial imported restoration exercised against actual game data.
@@ -125,3 +160,6 @@ Until recorded as passed below, these remain unverified.
 Manifest-verified cleanup removed approximately 8.33 GiB of superseded installers,
 incompatible libraries, extraction probes, build cache, and the obsolete runtime.
 All task-owned game processes were stopped. No public deployment was performed.
+Temporary public validation lobbies were opened and closed during the follow-up;
+no persistent public server was deployed. Follow-up fixtures and concise evidence
+are retained under `E:/Odin/scratch/nomad-drive/public-acceptance/` for reproduction.

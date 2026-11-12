@@ -42,6 +42,27 @@ NomadDrive.Server run --config C:/Servers/Nomad/server.json
 
 World settings apply when creating a world. Subsequent starts resume the slot recorded in `dataDirectory/world.json`. Importing a world preserves that world's settings. A missing selected slot is an error; the supervisor never silently replaces it with a new world. The game validates imported save format during startup.
 
+## Public lobbies
+
+Set `lobby.public` to `true` to advertise through the game's public lobby browser.
+For an open lobby, leave `lobby.password` empty:
+
+```json
+"lobby": {
+  "name": "Nomad Drive Server",
+  "maxPlayers": 4,
+  "public": true,
+  "password": ""
+}
+```
+
+Replace the existing `lobby` section with this example, then restart the supervisor.
+The vanilla browser searches for public lobbies with the same game version.
+Visibility and password are independent: a public lobby can also have a password.
+The host identity can appear as one occupied slot even when no humans are connected.
+Public hosting has reached readiness in a live test; browser discovery and vanilla
+joining are still pending. See [validation](VALIDATION.md).
+
 ## Backups, restarts, and recovery
 
 | Setting | Default | Meaning |
@@ -69,7 +90,7 @@ World settings apply when creating a world. Subsequent starts resume the slot re
 
 The plugin completes a save before copying an immutable snapshot. The supervisor archives that snapshot, compares the archived bytes with the snapshot using SHA-256, publishes the ZIP, applies retention, and removes that successfully archived snapshot. Failed snapshots and incomplete `.partial` archives are retained for diagnosis. Existing archives are not pruned after a failed save or failed archive. Retention only targets files matching the supervisor's exact archive naming pattern; unrelated files are left alone.
 
-Message text must contain 1 to 256 characters without control characters. Use `messagesEnabled: false` to disable notices rather than blank text. The warning template supports only `{remaining}`; omit it for a fixed warning. Unknown or unbalanced placeholders are rejected. Rendered warnings must also fit within 256 characters for every configured warning threshold. Other message fields are literal text.
+Message text must contain 1 to 256 characters without control characters. Use `messagesEnabled: false` to disable notices rather than blank text. The warning template supports only `{remaining}`; omit it for a fixed warning. Unknown or unbalanced placeholders are rejected. Rendered warnings must also fit within 256 characters at and below every configured warning threshold. If a long operation delays a warning, it reports the actual time remaining rounded up to a second, and crossed thresholds produce only one warning. Other message fields are literal text.
 
 A scheduled restart saves and waits for game exit before launching the same world. A failed save cancels that restart. A timed-out command might still be running, so the supervisor stops issuing additional save/shutdown commands and reports `attention`. It does not force-terminate a ready session. Failed or timed-out startup can be terminated because no ready session was established. A surviving process from a previous supervisor blocks another launch; inspect it before taking manual action. Each data directory and each game runtime also has an exclusive supervisor lock.
 

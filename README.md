@@ -27,6 +27,8 @@ repository does not contain or redistribute the game.
 
 - Startup JSON for lobby name, visibility, password, human player limit, world
   name, seed, difficulty, and all five resource density controls.
+- Public lobbies use `lobby.public: true`; leave `lobby.password` empty for open
+  joining. See the [public lobby example](docs/CONFIG.md#public-lobbies).
 - Creates a new world or imports a copy of an existing save slot. Restarts select
   the same saved slot. Seed and economy settings from an existing world take
   precedence over new-world configuration.

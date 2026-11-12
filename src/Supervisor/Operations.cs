@@ -109,12 +109,13 @@ public sealed class MaintenanceSchedule(ServerConfig config, TimeProvider? clock
         bool restart = config.Restarts.Enabled && now >= _nextRestart;
         if (backup) _nextBackup = now.AddMinutes(config.Backups.IntervalMinutes);
         var remaining = (_nextRestart - now).TotalSeconds;
-        var warnings = config.Restarts.Enabled && config.Restarts.MessagesEnabled && !restart
+        var crossedThresholds = config.Restarts.Enabled && config.Restarts.MessagesEnabled && !restart
             ? config.Restarts.WarningSeconds.Where(s => remaining <= s && !_sentWarnings.Contains(s)).OrderDescending().ToArray()
             : [];
-        foreach (var seconds in warnings) _sentWarnings.Add(seconds);
-        // If a long save crosses several warning thresholds, send only the most urgent remaining warning.
-        if (warnings.Length > 1) warnings = [warnings[^1]];
+        foreach (var seconds in crossedThresholds) _sentWarnings.Add(seconds);
+        // Thresholds decide when to warn, not how much time is left. A long save
+        // may cross several thresholds; announce the current countdown once.
+        var warnings = crossedThresholds.Length > 0 ? new[] { Math.Max(1, (int)Math.Ceiling(remaining)) } : [];
         if (restart)
         {
             _nextRestart = now.AddHours(config.Restarts.IntervalHours);

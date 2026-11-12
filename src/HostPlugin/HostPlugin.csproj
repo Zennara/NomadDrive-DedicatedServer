@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>NomadDrive.DedicatedServer</AssemblyName>
+    <GameDirectory Condition="'$(GameDirectory)' == ''">C:/Program Files (x86)/Steam/steamapps/common/Nomad Drive</GameDirectory>
+    <GameManaged>$(GameDirectory)/Nomad Drive_Data/Managed</GameManaged>
+    <BepInExDirectory Condition="'$(BepInExDirectory)' == ''">$(GameDirectory)/BepInEx/core</BepInExDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(GameManaged)/*.dll" Exclude="$(GameManaged)/System*.dll;$(GameManaged)/mscorlib.dll;$(GameManaged)/netstandard.dll;$(GameManaged)/Microsoft*.dll;$(GameManaged)/Mono*.dll"><Private>false</Private></Reference>
+    <Reference Include="BepInEx"><HintPath>$(BepInExDirectory)/BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(BepInExDirectory)/0Harmony.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+  <Target Name="CheckReferences" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(GameManaged)/Assembly-CSharp.dll')" Text="Set GameDirectory to your legally installed Nomad Drive directory." />
+    <Error Condition="!Exists('$(BepInExDirectory)/BepInEx.dll')" Text="Set BepInExDirectory to BepInEx 5 core libraries." />
+  </Target>
+</Project>

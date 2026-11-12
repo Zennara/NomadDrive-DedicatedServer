@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+artifacts/
+server.json
+runtime/
+data/
+*.user
+*.log

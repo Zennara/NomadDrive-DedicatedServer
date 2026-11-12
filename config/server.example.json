@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "gameDirectory": "../runtime",
+  "dataDirectory": "../data",
+  "headless": false,
+  "lobby": {
+    "name": "Nomad Drive Server",
+    "maxPlayers": 4,
+    "public": false,
+    "password": ""
+  },
+  "world": {
+    "name": "Server World",
+    "seed": 0,
+    "preset": "Normal",
+    "foodDensity": 100,
+    "waterDensity": 100,
+    "fuelDensity": 100,
+    "partsDensity": 100,
+    "medicineDensity": 100
+  },
+  "backups": {
+    "enabled": true,
+    "messagesEnabled": false,
+    "startMessage": "Server backup starting.",
+    "completedMessage": "Server backup completed.",
+    "intervalMinutes": 30,
+    "keep": 48
+  },
+  "restarts": {
+    "enabled": true,
+    "intervalHours": 6,
+    "warningSeconds": [600, 300, 60, 10],
+    "messagesEnabled": true,
+    "warningMessage": "Server restart in {remaining}.",
+    "restartingMessage": "Server is saving and restarting now.",
+    "stoppingMessage": "Server is saving and stopping now."
+  },
+  "recovery": {
+    "enabled": true,
+    "maxAttempts": 3,
+    "windowMinutes": 30,
+    "delaySeconds": 15
+  },
+  "startupTimeoutSeconds": 300,
+  "commandTimeoutSeconds": 120,
+  "shutdownTimeoutSeconds": 30
+}

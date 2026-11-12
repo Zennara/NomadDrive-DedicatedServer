@@ -1,0 +1,396 @@
+using System.IO.Compression;
+using System.Diagnostics;
+using System.Text.Json;
+using NomadDrive.Server;
+
+if (args.SequenceEqual(["--registration-child"]))
+{
+    Thread.Sleep(TimeSpan.FromMinutes(1));
+    return 0;
+}
+
+var root = Path.Combine(Environment.GetEnvironmentVariable("NOMADDRIVE_TEST_ROOT")
+    ?? "E:/Odin/scratch/nomad-drive/dedicated-server/tests", Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(root);
+int passed = 0, failed = 0;
+Console.WriteLine("Test evidence: " + root);
+
+async Task Check(string name, Func<Task> action)
+{
+    try { await action(); passed++; Console.WriteLine("PASS " + name); }
+    catch (Exception ex) { failed++; Console.WriteLine("FAIL " + name + Environment.NewLine + ex); }
+}
+Task Sync(Action action) { action(); return Task.CompletedTask; }
+void Require(bool condition, string message) { if (!condition) throw new Exception(message); }
+void Throws<T>(Action action) where T : Exception
+{
+    try { action(); } catch (T) { return; }
+    throw new Exception("Expected " + typeof(T).Name);
+}
+ServerConfig Config(string label)
+{
+    return new ServerConfig { GameDirectory = Path.Combine(root, label, "game"), DataDirectory = Path.Combine(root, label, "data") };
+}
+
+await Check("config rejects unknown properties and case mistakes", () => Sync(() =>
+{
+    var path = Path.Combine(root, "unknown.json");
+    File.WriteAllText(path, "{\"lobby\":{\"maxplayers\":8}}");
+    Throws<JsonException>(() => ServerConfig.Load(path));
+}));
+await Check("config validates player, density, schedule and null boundaries", () => Sync(() =>
+{
+    var config = Config("bounds");
+    config.Lobby.MaxPlayers = 1; config.Validate();
+    config.Lobby.MaxPlayers = 63; config.Validate();
+    config.Lobby.MaxPlayers = 64; Throws<InvalidDataException>(() => config.Validate());
+    config.Lobby.MaxPlayers = 4; config.World.FoodDensity = 27; Throws<InvalidDataException>(() => config.Validate());
+    config.World.FoodDensity = 25; config.Restarts.WarningSeconds = [60, 60]; Throws<InvalidDataException>(() => config.Validate());
+    config.Restarts.WarningSeconds = [60]; config.World = null!; Throws<InvalidDataException>(() => config.Validate());
+}));
+await Check("no-graphics mode is rejected to protect paint and restoration saves", () => Sync(() =>
+{
+    var config = Config("graphics");
+    Require(!config.Headless, "Default must retain the graphics context.");
+    config.Validate();
+    config.Headless = true;
+    Throws<InvalidDataException>(() => config.Validate());
+}));
+await Check("chat templates reject unknown placeholders and oversized rendered warnings", () => Sync(() =>
+{
+    var config = Config("templates");
+    config.Backups.StartMessage = new string('x', 256); config.Validate();
+    config.Backups.StartMessage += "x"; Throws<InvalidDataException>(() => config.Validate());
+    config.Backups.StartMessage = "Backup\nstarting"; Throws<InvalidDataException>(() => config.Validate());
+    config.Backups.StartMessage = "Backup starting";
+    config.Restarts.WarningMessage = "Restart {seconds}"; Throws<InvalidDataException>(() => config.Validate());
+    config.Restarts.WarningMessage = "Restart {remaining"; Throws<InvalidDataException>(() => config.Validate());
+    config.Restarts.WarningMessage = new string('x', 245) + "{remaining}";
+    config.Restarts.WarningSeconds = [21599]; Throws<InvalidDataException>(() => config.Validate());
+    config.Restarts.WarningMessage = "Restart soon."; config.Validate();
+    config.Restarts.StoppingMessage = null!; Throws<InvalidDataException>(() => config.Validate());
+}));
+await Check("warning renderer substitutes only remaining and enforces final chat limit", () => Sync(() =>
+{
+    Require(ChatMessages.RenderWarning("Maintenance in {remaining}.", 300) == "Maintenance in 5 minutes.", "Minutes were not substituted.");
+    Require(ChatMessages.RenderWarning("{remaining}", 60) == "1 minute", "Singular minute was not rendered.");
+    Require(ChatMessages.RenderWarning("{remaining}", 10) == "10 seconds", "Seconds were not substituted.");
+    Require(ChatMessages.RenderWarning("Restart soon.", 10) == "Restart soon.", "Optional placeholder was required.");
+    Throws<InvalidDataException>(() => ChatMessages.RenderWarning(new string('x', 245) + "{remaining}", 21599));
+}));
+await Check("relative config paths resolve against the config directory", () => Sync(() =>
+{
+    var path = Path.Combine(root, "relative", "server.json");
+    SafeFiles.AtomicJson(path, new ServerConfig());
+    var config = ServerConfig.Load(path);
+    Require(config.DataDirectory == Path.GetFullPath(Path.Combine(root, "relative", "data")), "Relative directory resolved incorrectly.");
+}));
+await Check("runtime requires prepared copy marker and executable", () => Sync(() =>
+{
+    var config = Config("runtime");
+    Directory.CreateDirectory(config.GameDirectory);
+    File.WriteAllText(Path.Combine(config.GameDirectory, "Nomad Drive.exe"), "not executed");
+    Throws<InvalidDataException>(() => config.Validate(true));
+    File.WriteAllText(Path.Combine(config.GameDirectory, ".nomaddrive-server-runtime"), "test fixture");
+    config.Validate(true);
+}));
+await Check("overlapping paths and sibling-prefix escapes are rejected", () => Sync(() =>
+{
+    var config = Config("overlap");
+    config.DataDirectory = Path.Combine(config.GameDirectory, "data");
+    Throws<InvalidDataException>(() => config.Validate());
+    Require(!SafeFiles.Inside(Path.Combine(root, "run_escape", "file"), Path.Combine(root, "run")), "Sibling prefix accepted.");
+}));
+await Check("exclusive lock prevents concurrent import or supervisor", () => Sync(() =>
+{
+    var data = Path.Combine(root, "locked");
+    using var held = SafeFiles.AcquireLock(data);
+    Throws<IOException>(() => { using var another = SafeFiles.AcquireLock(data); });
+}));
+await Check("orphan runtime guard blocks another supervisor even after lock is released", () => Sync(() =>
+{
+    var directory = Path.Combine(root, "orphan");
+    using var current = Process.GetCurrentProcess();
+    SafeFiles.AtomicJson(Path.Combine(directory, "active-runtime.json"), new LiveRuntime
+    {
+        GamePid = current.Id, GameStartedUtc = current.StartTime.ToUniversalTime(), RunDirectory = "test fixture"
+    });
+    Throws<IOException>(() => RuntimeGuard.RejectLiveGame(directory));
+}));
+await Check("failed initial runtime record write terminates only the just-launched test child", () => Sync(() =>
+{
+    var directory = Path.Combine(root, "failed-registration");
+    var record = Path.Combine(directory, "active-runtime.json");
+    // A directory at the destination deterministically makes the record publication fail.
+    Directory.CreateDirectory(record);
+    var start = new ProcessStartInfo(Environment.ProcessPath!)
+    {
+        UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden
+    };
+    if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase))
+        start.ArgumentList.Add(typeof(FakeGame).Assembly.Location);
+    start.ArgumentList.Add("--registration-child");
+    using var child = Process.Start(start) ?? throw new Exception("Could not start owned test process.");
+    try
+    {
+        Throws<IOException>(() => StartupRegistration.Complete(child, () =>
+        {
+            SafeFiles.AtomicJson(record, new LiveRuntime { GamePid = child.Id, GameStartedUtc = child.StartTime.ToUniversalTime() });
+            return true;
+        }, TimeSpan.FromSeconds(5)));
+        Require(child.HasExited, "Failed registration left the owned child running.");
+        Require(!File.Exists(record), "Fixture unexpectedly published a runtime record.");
+    }
+    finally
+    {
+        // Failure cleanup is restricted to the exact test child created above.
+        if (!child.HasExited) { child.Kill(entireProcessTree: true); child.WaitForExit(5000); }
+    }
+}));
+await Check("import copies whole slot without overwriting source or selected world", () => Sync(() =>
+{
+    var source = Path.Combine(root, "source");
+    Directory.CreateDirectory(Path.Combine(source, "backup"));
+    File.WriteAllText(Path.Combine(source, "save.dat"), "save fixture");
+    File.WriteAllText(Path.Combine(source, "backup", "previous.dat"), "backup fixture");
+    var data = Path.Combine(root, "imported");
+    var id = SafeFiles.ImportSlot(source, data);
+    Require(SafeFiles.ReadWorld(data)?.SlotId == id, "Selected world not persisted.");
+    Require(File.ReadAllText(Path.Combine(data, "saves", id, "backup", "previous.dat")) == "backup fixture", "Nested data missing.");
+    File.WriteAllText(Path.Combine(data, "saves", id, "save.dat"), "server version");
+    Require(File.ReadAllText(Path.Combine(source, "save.dat")) == "save fixture", "Source was modified.");
+    Throws<IOException>(() => SafeFiles.ImportSlot(source, data));
+}));
+await Check("missing selected world and traversal slot IDs fail closed", () => Sync(() =>
+{
+    var data = Path.Combine(root, "invalidworld");
+    SafeFiles.AtomicJson(Path.Combine(data, "world.json"), new WorldSelection { SlotId = "slot_missing" });
+    Throws<InvalidDataException>(() => SafeFiles.ReadWorld(data));
+    SafeFiles.AtomicJson(Path.Combine(data, "world.json"), new WorldSelection { SlotId = "../source" });
+    Throws<InvalidDataException>(() => SafeFiles.ReadWorld(data));
+}));
+await Check("save failure does not approve stop or wait for process exit", async () =>
+{
+    var game = new FakeGame(root) { Reply = _ => new CommandResponse { Ok = false, Error = "Save write failed" } };
+    var config = Config("savefailure"); config.Restarts.MessagesEnabled = false;
+    var operations = new ServerOperations(game, config, _ => { });
+    var response = await operations.ExecuteAsync("stop");
+    Require(!response.Ok && !operations.ShutdownAcknowledged && game.ExitWaits == 0, "Failed save incorrectly approved shutdown.");
+    Require(game.Commands.SequenceEqual(["shutdown"]), "Unexpected command sequence.");
+});
+await Check("timed out save blocks subsequent shutdown commands", async () =>
+{
+    var game = new FakeGame(root) { Reply = _ => throw new TimeoutException("Still saving") };
+    var operations = new ServerOperations(game, Config("timeout"), _ => { });
+    Require(!(await operations.ExecuteAsync("save")).Ok, "Timed out save reported success.");
+    Require(!(await operations.ExecuteAsync("stop")).Ok && game.Commands.Count == 1, "Shutdown issued after unresolved save.");
+});
+await Check("successful shutdown waits for process exit before restart", async () =>
+{
+    var game = new FakeGame(root);
+    var config = Config("restart"); config.Restarts.MessagesEnabled = false;
+    var operations = new ServerOperations(game, config, _ => { });
+    Require((await operations.ExecuteAsync("restart")).Ok, "Successful restart failed.");
+    Require(operations.ShutdownAcknowledged && game.ExitWaits == 1, "Did not wait for game exit.");
+});
+await Check("acknowledged shutdown with hung process does not claim restart success", async () =>
+{
+    var game = new FakeGame(root) { ExitResult = false };
+    var config = Config("hung"); config.Restarts.MessagesEnabled = false;
+    var operations = new ServerOperations(game, config, _ => { });
+    Require(!(await operations.ExecuteAsync("restart")).Ok && operations.ShutdownAcknowledged, "Hung game was treated as stopped.");
+    Require(!(await operations.ExecuteAsync("save")).Ok && game.Commands.Count == 1, "Issued command after shutdown acknowledgement.");
+});
+await Check("failed snapshot produces no backup archive", async () =>
+{
+    var game = new FakeGame(root) { Reply = _ => new CommandResponse { Ok = false, Error = "Save failed" } };
+    var config = Config("failedbackup");
+    var result = await new ServerOperations(game, config, _ => { }).ExecuteAsync("backup");
+    Require(!result.Ok && !Directory.Exists(Path.Combine(config.DataDirectory, "backups")), "Archived a failed snapshot.");
+});
+await Check("backup operation sends configured start and completion messages", async () =>
+{
+    var run = Path.Combine(root, "custom-notice-run");
+    var snapshot = Path.Combine(run, "snapshots", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(snapshot);
+    File.WriteAllText(Path.Combine(snapshot, "save.dat"), "saved data");
+    var game = new FakeGame(run) { Reply = command => new CommandResponse { Ok = true, SnapshotPath = command == "snapshot" ? snapshot : "" } };
+    var config = Config("custombackupnotice");
+    config.Backups.MessagesEnabled = true;
+    config.Backups.StartMessage = "Custom backup starting";
+    config.Backups.CompletedMessage = "Custom backup finished";
+    var response = await new ServerOperations(game, config, _ => { }).ExecuteAsync("backup");
+    Require(response.Ok, "Backup failed: " + response.Error);
+    Require(game.Commands.SequenceEqual(["say", "snapshot", "say"]), "Backup message order incorrect.");
+    Require(game.Texts.SequenceEqual(["Custom backup starting", "", "Custom backup finished"]), "Configured backup messages were not used.");
+});
+await Check("shutdown operations send configured restart and stopping messages", async () =>
+{
+    var config = Config("customshutdownnotice");
+    config.Restarts.RestartingMessage = "Custom restart notice";
+    config.Restarts.StoppingMessage = "Custom stop notice";
+    foreach (var command in new[] { "restart", "stop" })
+    {
+        var game = new FakeGame(root);
+        Require((await new ServerOperations(game, config, _ => { }).ExecuteAsync(command)).Ok, "Shutdown operation failed.");
+        Require(game.Commands.SequenceEqual(["say", "shutdown"]), "Shutdown message order incorrect.");
+        Require(game.Texts[0] == (command == "restart" ? "Custom restart notice" : "Custom stop notice"), "Configured shutdown message was not used.");
+    }
+});
+await Check("snapshot path outside launch directory is rejected", () => Sync(() =>
+{
+    var store = new BackupStore(Path.Combine(root, "escaped-backups"), 2);
+    Throws<InvalidDataException>(() => store.Create(Path.Combine(root, "source"), Path.Combine(root, "run"), DateTimeOffset.UtcNow));
+}));
+await Check("backup preserves nested bytes and retention preserves unrelated archives", () => Sync(() =>
+{
+    var run = Path.Combine(root, "backuprun");
+    string MakeSnapshot()
+    {
+        var path = Path.Combine(run, "snapshots", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(path, "backup"));
+        File.WriteAllBytes(Path.Combine(path, "save.dat"), [1, 2, 3, 4]);
+        File.WriteAllText(Path.Combine(path, "backup", "old.dat"), "old");
+        return path;
+    }
+    var destination = Path.Combine(root, "archive");
+    Directory.CreateDirectory(destination);
+    File.WriteAllText(Path.Combine(destination, "personal.zip"), "unrelated");
+    File.WriteAllText(Path.Combine(destination, "nomaddrive-not-ours.zip"), "unrelated");
+    var store = new BackupStore(destination, 2);
+    var now = DateTimeOffset.Parse("2026-11-12T12:00:00Z");
+    var firstSnapshot = MakeSnapshot();
+    store.Create(firstSnapshot, run, now);
+    Require(!Directory.Exists(firstSnapshot), "Successfully archived snapshot was not removed.");
+    store.Create(MakeSnapshot(), run, now.AddMinutes(1));
+    var newest = store.Create(MakeSnapshot(), run, now.AddMinutes(2));
+    Require(Directory.GetFiles(destination, "*.zip").Length == 4, "Retention deleted wrong number of files.");
+    Require(File.Exists(Path.Combine(destination, "personal.zip")), "Deleted unrelated archive.");
+    using var archive = ZipFile.OpenRead(newest);
+    using var stream = archive.GetEntry("save.dat")!.Open();
+    using var memory = new MemoryStream(); stream.CopyTo(memory);
+    Require(memory.ToArray().SequenceEqual(new byte[] { 1, 2, 3, 4 }), "Backup changed save bytes.");
+    Require(archive.GetEntry("backup/old.dat") != null, "Backup lost nested file.");
+}));
+await Check("crash retries are bounded across short successful sessions", () => Sync(() =>
+{
+    var clock = new FakeClock();
+    var config = new RecoveryConfig { MaxAttempts = 3, WindowMinutes = 30 };
+    var budget = new CrashBudget(config, clock);
+    Require(budget.TrySpend() && budget.TrySpend() && budget.TrySpend() && !budget.TrySpend(), "Crash retry budget was not bounded.");
+    clock.Advance(TimeSpan.FromMinutes(30));
+    Require(budget.TrySpend(), "Retry window did not expire.");
+    config.Enabled = false; Require(!budget.TrySpend(), "Disabled recovery spent retry.");
+}));
+await Check("backup and restart schedules fire once with warning thresholds", () => Sync(() =>
+{
+    var clock = new FakeClock(); var config = Config("schedule");
+    var schedule = new MaintenanceSchedule(config, clock); schedule.Begin();
+    Require(!schedule.Poll().Backup, "Backup fired immediately.");
+    clock.Advance(TimeSpan.FromMinutes(30)); Require(schedule.Poll().Backup && !schedule.Poll().Backup, "Backup scheduling repeated or failed.");
+    clock.Advance(TimeSpan.FromMinutes(320));
+    Require(schedule.Poll().Warnings.SequenceEqual([600]), "10-minute warning missing.");
+    Require(schedule.Poll().Warnings.Length == 0, "Warning repeated.");
+    clock.Advance(TimeSpan.FromMinutes(9)); Require(schedule.Poll().Warnings.SequenceEqual([60]), "Missed thresholds did not collapse to urgent warning.");
+    clock.Advance(TimeSpan.FromMinutes(1)); Require(schedule.Poll().Restart && !schedule.Poll().Restart, "Restart repeated or missing.");
+}));
+await Check("IPC waits for matching atomic response", async () =>
+{
+    var directory = Path.Combine(root, "ipc");
+    var request = new CommandRequest { Command = "save" };
+    var pending = Protocol.SendAsync(directory, request, TimeSpan.FromSeconds(5));
+    var written = Protocol.Read<CommandRequest>(Path.Combine(directory, "requests", request.Id + ".json"));
+    Require(written?.Command == "save", "Request not written.");
+    SafeFiles.AtomicJson(Path.Combine(directory, "responses", request.Id + ".json"), new CommandResponse { Id = request.Id, Ok = true });
+    Require((await pending).Ok, "Response not delivered.");
+});
+await Check("host error and stale heartbeat suspend scheduled work", () => Sync(() =>
+{
+    var now = DateTimeOffset.UtcNow;
+    var grace = TimeSpan.FromSeconds(120);
+    var status = new PluginStatus { State = "ready", UpdatedUtc = now };
+    Require(HostHealth.Problem(status, now, grace) is null, "Healthy host was marked unhealthy.");
+    status.State = "error"; status.Detail = "Lobby disconnected";
+    Require(HostHealth.Problem(status, now, grace)?.Contains("Lobby disconnected") == true, "Host error was not surfaced.");
+    status.State = "ready"; status.UpdatedUtc = now.AddSeconds(-121);
+    Require(HostHealth.Problem(status, now, grace)?.Contains("stale") == true, "Stale heartbeat was not detected.");
+    Require(HostHealth.Problem(null, now, grace) is not null, "Missing heartbeat was not detected.");
+}));
+await Check("IPC rejects mismatched response IDs", async () =>
+{
+    var directory = Path.Combine(root, "badipc");
+    var request = new CommandRequest { Command = "save" };
+    SafeFiles.AtomicJson(Path.Combine(directory, "responses", request.Id + ".json"), new CommandResponse { Id = Guid.NewGuid().ToString("N"), Ok = true });
+    try { await Protocol.SendAsync(directory, request, TimeSpan.FromSeconds(1)); }
+    catch (InvalidDataException) { return; }
+    throw new Exception("Accepted wrong response ID.");
+});
+await Check("concurrent IPC reads tolerate 500 atomic File.Replace updates", async () =>
+{
+    var directory = Path.Combine(root, "replace-ipc");
+    Directory.CreateDirectory(directory);
+    var path = Path.Combine(directory, "status.json");
+    var payload = new string('x', 32768);
+    File.WriteAllText(path, JsonSerializer.Serialize(new PluginStatus { State = "ready", Players = 0, Detail = "0:" + payload }, Protocol.Json));
+    using var start = new ManualResetEventSlim();
+    int reads = 0;
+    var writer = Task.Run(() =>
+    {
+        start.Wait();
+        for (var index = 1; index <= 500; index++)
+        {
+            var temporary = Path.Combine(directory, "replacement.json");
+            File.WriteAllText(temporary, JsonSerializer.Serialize(new PluginStatus { State = "ready", Players = index, Detail = index + ":" + payload }, Protocol.Json));
+            File.Replace(temporary, path, null);
+        }
+    });
+    var reader = Task.Run(() =>
+    {
+        start.Wait();
+        while (!writer.IsCompleted || reads < 500)
+        {
+            var status = Protocol.Read<PluginStatus>(path, tolerateSharingViolation: true);
+            if (status is null) continue;
+            Require(status.State == "ready" && status.Detail == status.Players + ":" + payload, "Read a partial or mixed JSON generation.");
+            reads++;
+        }
+    });
+    start.Set();
+    await Task.WhenAll(writer, reader);
+    Require(Protocol.Read<PluginStatus>(path)?.Players == 500 && reads >= 500, "Final replacement or concurrent reads missing.");
+});
+await Check("sharing violation polling is bounded while startup guards fail closed", () => Sync(() =>
+{
+    var path = Path.Combine(root, "sharing.json");
+    File.WriteAllText(path, "{\"state\":\"ready\"}");
+    using var held = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+    var watch = Stopwatch.StartNew();
+    Require(Protocol.Read<PluginStatus>(path, tolerateSharingViolation: true) is null, "Locked polling read was not deferred.");
+    Require(watch.Elapsed < TimeSpan.FromSeconds(2), "Polling read blocked too long.");
+    Throws<IOException>(() => Protocol.Read<PluginStatus>(path));
+}));
+
+Console.WriteLine($"{passed} passed; {failed} failed.");
+return failed == 0 ? 0 : 1;
+
+sealed class FakeClock : TimeProvider
+{
+    private DateTimeOffset _now = DateTimeOffset.Parse("2026-11-12T12:00:00Z");
+    public override DateTimeOffset GetUtcNow() => _now;
+    public void Advance(TimeSpan time) => _now += time;
+}
+sealed class FakeGame(string run) : IGameSession
+{
+    public string RunDirectory { get; } = run;
+    public bool HasExited => false;
+    public bool ExitResult { get; set; } = true;
+    public int ExitWaits { get; private set; }
+    public List<string> Commands { get; } = new();
+    public List<string> Texts { get; } = new();
+    public Func<string, CommandResponse> Reply { get; set; } = _ => new CommandResponse { Ok = true };
+    public Task<CommandResponse> SendAsync(string command, string text = "")
+    {
+        Commands.Add(command); Texts.Add(text); return Task.FromResult(Reply(command));
+    }
+    public Task<bool> WaitForExitAsync(TimeSpan timeout) { ExitWaits++; return Task.FromResult(ExitResult); }
+}

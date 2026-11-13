@@ -43,7 +43,7 @@ NomadDrive.Server run --config C:/Servers/Nomad/server.json
 | `gameDirectory` | `./runtime` | Separate game installation containing the prepared-runtime marker `.nomaddrive-server-runtime`. |
 | `dataDirectory` | `./data` | Server-owned saves, backups, logs, and IPC state. Must not overlap the game directory. |
 | `headless` | `false` | Must remain `false`. Launches with `-batchmode` and a hidden 640 by 480 graphics surface. `true` is rejected because no-graphics mode cannot preserve vehicle paint/restoration saves. |
-| `lobby.name` | `Nomad Drive Server` | Lobby name, 1 to 24 characters. |
+| `lobby.name` | `Nomad Drive Server` | Lobby name, 1 to 64 characters. |
 | `lobby.maxPlayers` | `4` | Human player slots, 1 to 63. The host identity consumes another lobby membership. The upper bound is a protocol limit, not a tested performance guarantee. |
 | `lobby.public` | `false` | Whether the lobby is publicly listed. |
 | `lobby.password` | empty | Optional password, up to 24 characters. |

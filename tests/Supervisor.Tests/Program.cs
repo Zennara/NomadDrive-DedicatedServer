@@ -48,6 +48,16 @@ async Task<(int ExitCode, string Output, string Error)> Cli(params string[] argu
     finally { Console.SetOut(output); Console.SetError(error); }
 }
 
+await Check("descriptive public lobby names preserve Nomad settings", () => Sync(() =>
+{
+    var config = Config("long-lobby");
+    config.Lobby.Name = "Zen's 24/7 Drive - Custom Plugins";
+    config.Lobby.Public = true;
+    config.World.Preset = "Nomad";
+    config.Validate(false);
+    config.Lobby.Name = new string('x', 65);
+    Throws<InvalidDataException>(() => config.Validate(false));
+}));
 await Check("spawn reference follows arrival order rather than recycled IDs", () => Sync(() =>
 {
     var order = new ConnectionOrder<TestConnection>();

@@ -49,7 +49,7 @@ public sealed class ServerConfig
         if (Headless) Fail("No-graphics mode cannot preserve vehicle paint/restoration saves. Use headless:false; a hidden graphics context is required.");
         if (Lobby is null || World is null || Backups is null || Restarts is null || Recovery is null)
             Fail("Config sections cannot be null.");
-        Text(Lobby!.Name, "lobby.name", 24);
+        Text(Lobby!.Name, "lobby.name", 64);
         if (Lobby.Password is null || Lobby.Password.Length > 24) Fail("lobby.password must be a string of at most 24 characters.");
         Range(Lobby.MaxPlayers, 1, 63, "lobby.maxPlayers");
         Text(World!.Name, "world.name", 24);

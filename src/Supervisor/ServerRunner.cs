@@ -104,6 +104,11 @@ public sealed class ServerRunner(ServerConfig config, Action<string> log)
                     await Task.Delay(250);
                 }
                 _status.GamePid = 0;
+                if (operations.RequiresManualExitReview)
+                {
+                    SetStatus("attention", "The game exited after a shutdown request timed out. Its result is unconfirmed; automatic restart is disabled. Check the final save and plugin logs before starting again.");
+                    return 1;
+                }
                 if (plannedExit == "stop")
                 {
                     SetStatus("stopped", "Completed save and graceful shutdown.");

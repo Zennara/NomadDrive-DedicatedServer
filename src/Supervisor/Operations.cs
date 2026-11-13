@@ -5,6 +5,8 @@ public sealed class ServerOperations(IGameSession game, ServerConfig config, Act
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     public bool ShutdownAcknowledged { get; private set; }
     public bool CommandsUncertain { get; private set; }
+    public bool ShutdownRequested { get; private set; }
+    public bool RequiresManualExitReview => ShutdownRequested && CommandsUncertain && !ShutdownAcknowledged;
 
     public async Task<CommandResponse> ExecuteAsync(string command, string text = "")
     {
@@ -45,8 +47,9 @@ public sealed class ServerOperations(IGameSession game, ServerConfig config, Act
                         if (!notice.Ok) log("Chat notice failed: " + notice.Error);
                     }
                     // Shutdown owns the save operation. A failed save never authorizes terminating the process.
+                    ShutdownRequested = true;
                     var result = await game.SendAsync("shutdown");
-                    if (!result.Ok) return result;
+                    if (!result.Ok) { ShutdownRequested = false; return result; }
                     ShutdownAcknowledged = true;
                     if (!await game.WaitForExitAsync(TimeSpan.FromSeconds(config.ShutdownTimeoutSeconds)))
                         return Failure("The game acknowledged its completed save but did not exit. It has not been killed. Stop/restart needs operator intervention.");
@@ -62,6 +65,7 @@ public sealed class ServerOperations(IGameSession game, ServerConfig config, Act
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
+            if (ShutdownRequested && !ShutdownAcknowledged) CommandsUncertain = true;
             log(ex.Message);
             return Failure(ex.Message);
         }

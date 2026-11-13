@@ -1,6 +1,15 @@
 # Validation
 
-Status: preview 0.2.0.3. Previous builds verified host lifecycle, public discovery,
+Status: preview 0.3.0.4. The supervisor suite passes 41 checks, including uncertain
+late shutdown exits not being treated as crash-restart permission. Host and CLI
+builds have zero warnings/errors. An isolated actual-game test with Vehicle Claiming
+& Protection 0.4.0.3 completed automatic parking before shutdown, kept claims parked
+after restart, canceled a test-refused shutdown without stopping or locking commands,
+and completed a subsequent stop. These are host-side checks, not remote-client UI
+acceptance. Long parking queues can exceed command timeouts; unconfirmed late exits
+require operator review rather than automatic recovery.
+
+Previous builds verified host lifecycle, public discovery,
 vanilla joining, visible server chat, and rejoining after restart. The new spawn
 policy still needs live multiplayer acceptance. Vehicle, item, paint, and
 imported-player persistence checks remain outstanding.

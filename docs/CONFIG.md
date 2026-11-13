@@ -1,5 +1,21 @@
 # Command-line configuration
 
+## Plugin shutdown preparation (0.3.0.4)
+
+Host plugins may subscribe to `NomadDrive.DedicatedServer.Plugin.BeforeShutdown`
+with `Func<UniTask<bool>>`. Every callback finishes before the final save and exit.
+False or an exception cancels shutdown. `ShutdownCanceled` notifies plugins when
+preparation or the final save fails.
+
+`SavePluginCheckpointAsync()` runs a coordinated save on the Unity thread, including
+during preparation without queuing behind the shutdown itself. Outside preparation
+it refuses concurrent supervisor operations. Success includes saving the dedicated
+position sidecar. Vehicle Claiming & Protection uses these hooks for automatic parking.
+
+Large parking queues may require higher `commandTimeoutSeconds`. An unacknowledged
+timeout does not force-kill the game. Crashes and forced termination cannot execute
+preparation callbacks.
+
 The server requires a working graphics device and driver even though administration is command-line only. Keep `headless` set to `false`. Nomad Drive reads vehicle paint and restoration data back from GPU textures while saving; `-nographics` cannot preserve those changes. The supervisor uses batch mode with a small hidden graphics surface. A Windows server session must still provide a usable graphics context.
 
 Build the supervisor with the .NET 9 SDK:

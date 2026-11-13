@@ -287,6 +287,25 @@ await Check("successful shutdown waits for process exit before restart", async (
     Require((await operations.ExecuteAsync("restart")).Ok, "Successful restart failed.");
     Require(operations.ShutdownAcknowledged && game.ExitWaits == 1, "Did not wait for game exit.");
 });
+await Check("late exit after shutdown timeout never authorizes crash restart", async () =>
+{
+    foreach (var command in new[] { "stop", "restart" })
+    {
+        var config = Config("late-" + command); config.Restarts.MessagesEnabled = false;
+        var game = new FakeGame(root) { Reply = _ => throw new TimeoutException("Parking is still running") };
+        var operations = new ServerOperations(game, config, _ => { });
+        Require(!(await operations.ExecuteAsync(command)).Ok, "Timed out shutdown reported success.");
+        Require(operations.RequiresManualExitReview && !operations.ShutdownAcknowledged, "An uncertain shutdown could be restarted as a crash.");
+        Require(game.ExitWaits == 0 && !(await operations.ExecuteAsync("save")).Ok, "Uncertain shutdown admitted more operations.");
+    }
+});
+await Check("unreadable shutdown acknowledgement requires manual exit review", async () =>
+{
+    var config = Config("unreadable-shutdown"); config.Restarts.MessagesEnabled = false;
+    var game = new FakeGame(root) { Reply = _ => throw new InvalidDataException("Invalid response ID") };
+    var operations = new ServerOperations(game, config, _ => { });
+    Require(!(await operations.ExecuteAsync("stop")).Ok && operations.RequiresManualExitReview, "Unconfirmed shutdown was treated as an ordinary crash.");
+});
 await Check("acknowledged shutdown with hung process does not claim restart success", async () =>
 {
     var game = new FakeGame(root) { ExitResult = false };

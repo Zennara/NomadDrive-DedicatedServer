@@ -24,7 +24,7 @@ using Player = NomadDrive.Features.Player.Player;
 
 namespace NomadDrive.DedicatedServer;
 
-[BepInPlugin("odin.nomaddrive.dedicatedserver", "Nomad Drive Dedicated Server", "0.2.0")]
+[BepInPlugin("odin.nomaddrive.dedicatedserver", "Nomad Drive Dedicated Server", "0.3.0")]
 public sealed class Plugin : BaseUnityPlugin
 {
     internal static Plugin Instance;
@@ -32,6 +32,10 @@ public sealed class Plugin : BaseUnityPlugin
     internal static JObject Settings;
     internal static string DataRoot, RunRoot;
     internal static bool SaveAuthorized;
+    /// <summary>Host plugins may finish durable work before a planned shutdown. False cancels shutdown.</summary>
+    public static Func<UniTask<bool>> BeforeShutdown;
+    public static Action ShutdownCanceled;
+    private bool preparingShutdown, pluginCheckpoint;
     internal static bool RestoreCompleted;
     internal static int AppliedTiles;
     internal static Vector3? ImportAnchor;
@@ -221,19 +225,33 @@ public sealed class Plugin : BaseUnityPlugin
         busy = true;
         string id = Path.GetFileNameWithoutExtension(path);
         bool quit = false;
+        bool shutdownRequested = false;
         try
         {
             if (!Guid.TryParse(id, out _)) throw new Exception("Invalid request ID");
             var request = JObject.Parse(File.ReadAllText(path));
             if ((string)request["id"] != id) throw new Exception("Request ID mismatch");
             var command = (string)request["command"];
+            shutdownRequested = command == "shutdown";
             if (!ready) throw new Exception("Server is not ready: " + detail);
             string snapshot = null;
             switch (command)
             {
                 case "say": Broadcast((string)request["text"]); break;
                 case "save": case "snapshot": case "shutdown":
-                    if (command == "shutdown") closing = true;
+                    if (command == "shutdown")
+                    {
+                        closing = true;
+                        preparingShutdown = true;
+                        try
+                        {
+                            var callbacks = BeforeShutdown;
+                            if (callbacks != null)
+                                foreach (Func<UniTask<bool>> callback in callbacks.GetInvocationList())
+                                    if (!await callback()) throw new Exception("A host plugin could not prepare a safe shutdown; action canceled.");
+                        }
+                        finally { preparingShutdown = false; }
+                    }
                     SaveAuthorized = true;
                     bool saved;
                     try { saved = await Saves.SaveAndWaitAsync(); }
@@ -256,7 +274,17 @@ public sealed class Plugin : BaseUnityPlugin
             Logger.LogError(ex);
             AtomicJson(Path.Combine(RunRoot, "responses", id + ".json"), new { id, ok = false, error = ex.Message });
         }
-        finally { busy = false; if (!quit) closing = false; }
+        finally
+        {
+            busy = false;
+            if (!quit)
+            {
+                closing = false;
+                if (shutdownRequested && ShutdownCanceled != null)
+                    foreach (Action callback in ShutdownCanceled.GetInvocationList())
+                        try { callback(); } catch (Exception error) { Logger.LogError("Shutdown cancellation callback failed: " + error); }
+            }
+        }
         if (quit)
         {
             ready = false;
@@ -265,6 +293,31 @@ public sealed class Plugin : BaseUnityPlugin
             await UniTask.Delay(250, ignoreTimeScale: true);
             NetworkManager.singleton.StopHost();
             Application.Quit(0);
+        }
+    }
+
+    /// <summary>Run on the Unity thread. Serialize plugin checkpoints with supervisor commands.</summary>
+    public static async UniTask<bool> SavePluginCheckpointAsync()
+    {
+        var host = Instance;
+        if (host == null || !host.ready || host.failed || Saves == null || host.pluginCheckpoint ||
+            (host.busy && !host.preparingShutdown) || (host.closing && !host.preparingShutdown)) return false;
+        var ownsBusy = !host.busy;
+        host.busy = true;
+        host.pluginCheckpoint = true;
+        SaveAuthorized = true;
+        try
+        {
+            var saved = await Saves.SaveAndWaitAsync();
+            if (!saved || !Saves.LastSaveSucceeded) return false;
+            AtomicJson(Path.Combine(EvilSave.GetSlotDirectory(Saves.ActiveSlotId), "dedicated-positions.json"), host.positions);
+            return true;
+        }
+        finally
+        {
+            SaveAuthorized = false;
+            host.pluginCheckpoint = false;
+            if (ownsBusy) host.busy = false;
         }
     }
 

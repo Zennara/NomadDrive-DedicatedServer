@@ -24,7 +24,7 @@ using Player = NomadDrive.Features.Player.Player;
 
 namespace NomadDrive.DedicatedServer;
 
-[BepInPlugin("odin.nomaddrive.dedicatedserver", "Nomad Drive Dedicated Server", "0.3.0")]
+[BepInPlugin("odin.nomaddrive.dedicatedserver", "Nomad Drive Dedicated Server", "0.3.1")]
 public sealed class Plugin : BaseUnityPlugin
 {
     internal static Plugin Instance;

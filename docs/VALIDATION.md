@@ -1,6 +1,7 @@
 # Validation
 
-Status: preview 0.3.0.4. The supervisor suite passes 41 checks, including uncertain
+Status: preview 0.3.1.5. The supervisor suite passes 42 checks, including descriptive
+public lobby names with the Nomad preset and uncertain
 late shutdown exits not being treated as crash-restart permission. Host and CLI
 builds have zero warnings/errors. An isolated actual-game test with Vehicle Claiming
 & Protection 0.4.0.3 completed automatic parking before shutdown, kept claims parked

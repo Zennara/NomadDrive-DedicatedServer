@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "serverVersion": "0.3.1.5",
+  "serverVersion": "0.3.2.6",
   "releaseChannel": "preview",
   "game": {
     "name": "Nomad Drive",
@@ -16,7 +16,7 @@
     "version": "5.4.23.6"
   },
   "validation": {
-    "verifiedOn": "2026-11-12",
+    "verifiedOn": "2026-11-14",
     "details": "docs/VALIDATION.md",
     "remaining": [
       "Live spawn-reference handover, returning players, and simultaneous joins",
@@ -24,7 +24,8 @@
       "Nonempty inventory and paint/wash persistence",
       "Imported host inventory and position restoration",
       "Readable saves with partial object restoration failures",
-      "Split-region multiplayer, extended play, and capacity testing"
+      "Split-region multiplayer, extended play, and capacity testing",
+      "Two vanilla clients exchanging native voice audio, spatialization and reconnect"
     ]
   }
 }

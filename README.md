@@ -8,7 +8,7 @@ A working Windows graphics device is required. The process runs in the backgroun
 with a graphics context because the game's paint and restoration saves depend on
 GPU texture readback. No-graphics mode is rejected to prevent losing those changes.
 
-**Preview 0.3.1.5.** Supports descriptive lobby names up to 64 characters, coordinated plugin saves and shutdown preparation for automatic vehicle parking. Compilation and supervisor tests do not establish
+**Preview 0.3.2.6.** Supports descriptive lobby names up to 64 characters, coordinated plugin saves and shutdown preparation for automatic vehicle parking. Compilation and supervisor tests do not establish
 vanilla-client compatibility. See [validation](docs/VALIDATION.md) for the actual
 runtime results and remaining checks before using a valuable world.
 
@@ -52,9 +52,12 @@ one. Four humans remain the default. The upper bound is a protocol ceiling,
 not a performance or stability claim. Economy scaling remains capped at eight
 by the game.
 
-For configurations above 15 humans the adapter disables the EOS voice room as
-a conservative compatibility policy. This is not a verified 16-person voice
-limit. Stock lobby browsers may show one extra occupied slot for the server.
+Native EOS voice requires at most 16 lobby identities, including the reserved
+host, so it supports at most 15 human slots in this adapter. Larger configurations
+retain their capacity with voice disabled and an explicit startup warning. An
+isolated 64-identity RTC-enabled lobby was rejected by the backend. Voice media
+between real clients still requires acceptance testing. Stock lobby browsers may
+show one extra occupied slot for the server.
 
 World generation retains the game's host client services and follows connected
 players. Floating-origin rebasing follows the first connected player. The game

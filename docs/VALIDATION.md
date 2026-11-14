@@ -1,6 +1,6 @@
 # Validation
 
-Status: preview 0.3.1.5. The supervisor suite passes 42 checks, including descriptive
+Status: preview 0.3.2.6. The supervisor suite passes 42 checks, including descriptive
 public lobby names with the Nomad preset and uncertain
 late shutdown exits not being treated as crash-restart permission. Host and CLI
 builds have zero warnings/errors. An isolated actual-game test with Vehicle Claiming
@@ -134,6 +134,44 @@ The first loader probe used an already installed Windows Mono profile from Unity
 Windows editor profile. Final validation uses only the exact editor profile.
 
 ## Required runtime checks
+
+### Native voice capacity investigation (2026-11-14, 0.3.2.6 candidate)
+
+Native voice is tied to the lobby conference room. Removing the large-lobby
+guard and requesting RTC for 64 identities failed before world startup:
+
+```text
+LobbyInvalidSession
+Lobbies that generate conference rooms must have <= 16 max players, has 64
+```
+
+This runtime backend response establishes a 16-identity conference-lobby limit
+for the tested product. The adapter reserves one for its host client, leaving 15
+human slots when using native voice. A 63-human configuration retains its capacity
+with RTC disabled and an explicit warning. The candidate checks actual requested
+MaxLobbyMembers rather than guessing from current occupancy. It never silently
+reduces the configured player limit. The user has not chosen a production limit
+change; all tests remain private and production remains unchanged.
+
+A guarded private 15-human test successfully requested 16 identities with RTC
+and ManualJoin, received a 16-member lobby, resolved its room name, and reported
+the host connected. Evidence: [room allocation and connection](evidence/voice-room-probe.json)
+and [backend limit](evidence/voice-limit-probe.json). Microphone capture, two
+vanilla clients hearing one another, spatial falloff, mute/reconnect behavior,
+and simultaneous voice capacity remain unverified. mediaVerified remains false.
+
+Pinned native source: networking.cs:4420/4421 enables RTC and manual joining;
+:4450 retries the same options. game.cs:79110 returns when room lookup fails;
+:79279 joins the room without requiring a host avatar. Epic's
+[lobby reference](https://dev.epicgames.com/docs/epic-online-services/multiplayer/lobbies-and-sessions/lobby-interface/lobby-interface-reference)
+describes 64 lobby identities; that is not a promise of 64 voice participants.
+Its [RTC join API](https://dev.epicgames.com/docs/api-ref/functions/eos-lobby-join-rtc-room)
+describes separate room enrollment. The native backend response above provides
+the numeric conference limit that documentation research did not establish.
+
+Host, CLI and diagnostic probe builds pass with zero warnings/errors; supervisor
+suite reports 42 passed, 0 failed. Test-only observer probes are excluded from the
+release package. See tests/VoiceRoomProbe/README.md for guards and reproduction.
 
 ### Public lobby and damaged-save follow-up
 

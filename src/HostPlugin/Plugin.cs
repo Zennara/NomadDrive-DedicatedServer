@@ -24,7 +24,7 @@ using Player = NomadDrive.Features.Player.Player;
 
 namespace NomadDrive.DedicatedServer;
 
-[BepInPlugin("odin.nomaddrive.dedicatedserver", "Nomad Drive Dedicated Server", "0.3.1")]
+[BepInPlugin("odin.nomaddrive.dedicatedserver", "Nomad Drive Dedicated Server", "0.3.2")]
 public sealed class Plugin : BaseUnityPlugin
 {
     internal static Plugin Instance;
@@ -489,7 +489,14 @@ internal static class LargeLobbyVoice
 {
     static void Prefix(ref Epic.OnlineServices.Lobby.CreateLobbyOptions createOptions)
     {
-        if (Plugin.HumanLimit > 15) createOptions.EnableRTCRoom = false;
+        // Confirmed by the EOS backend: conference lobbies allow at most 16
+        // identities. This adapter reserves one identity for its host client.
+        // Never silently reduce the configured human capacity to enable voice.
+        if(createOptions.EnableRTCRoom&&createOptions.MaxLobbyMembers>16)
+        {
+            createOptions.EnableRTCRoom=false;
+            Debug.LogWarning("[Dedicated Server] EOS native voice requires at most 15 human slots plus the reserved host. Voice is disabled to preserve the configured lobby capacity.");
+        }
     }
 }
 

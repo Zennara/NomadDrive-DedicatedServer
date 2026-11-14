@@ -1,0 +1,13 @@
+{
+  "verifiedDate": "2026-11-14",
+  "gameVersion": "1.0.1",
+  "steamBuildId": 26391437,
+  "configuredHumans": 63,
+  "requestedMaxLobbyMembers": 64,
+  "requestedEnableRTCRoom": true,
+  "result": "LobbyInvalidSession",
+  "backendError": "Lobbies that generate conference rooms must have <= 16 max players, has 64",
+  "source": "Actual private native EOS lobby creation; no ready world session was established.",
+  "productionChanged": false,
+  "mediaVerified": false
+}

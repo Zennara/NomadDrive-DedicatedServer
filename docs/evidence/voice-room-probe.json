@@ -1,0 +1,16 @@
+{
+  "mediaVerified": false,
+  "configuredHumanSlots": 15,
+  "requestedMaxLobbyMembers": 16,
+  "requestedEnableRTCRoom": true,
+  "requestedJoinAction": "ManualJoin",
+  "copyLobbyDetailsResult": "Success",
+  "lobbyInfoResult": "Success",
+  "actualMaxMembers": 16,
+  "roomNameResult": "Success",
+  "roomNamePresent": true,
+  "connectionQueryResult": "Success",
+  "hostRTCConnected": true,
+  "roomCreationPassed": true,
+  "finished": true
+}

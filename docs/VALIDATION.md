@@ -1,6 +1,6 @@
 # Validation
 
-Status: preview 0.3.2.6. The supervisor suite passes 42 checks, including descriptive
+Status: preview 0.3.3.7. The supervisor suite passes 44 checks, including descriptive
 public lobby names with the Nomad preset and uncertain
 late shutdown exits not being treated as crash-restart permission. Host and CLI
 builds have zero warnings/errors. An isolated actual-game test with Vehicle Claiming
@@ -270,3 +270,12 @@ Earlier temporary public validation lobbies were opened and closed; the later
 client acceptance handoff is described above. No persistent public server was
 deployed. Follow-up fixtures and concise evidence
 are retained under `E:/Odin/scratch/nomad-drive/public-acceptance/` for reproduction.
+
+## Windows status replacement (0.3.3.7)
+
+On November 14, all 44 supervisor checks passed. New Windows regressions hold
+a destination open without delete sharing, verify recovery after release, and
+verify bounded failure preserves both the old JSON and flushed replacement.
+Atomic replacement retries only Windows access/sharing/lock violations for up to
+two seconds. Permanent failures still propagate; the denying reader in the live
+incident has not been identified. No destination deletion fallback is used.

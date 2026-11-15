@@ -65,7 +65,22 @@ public static partial class SafeFiles
             JsonSerializer.Serialize(stream, value, ServerConfig.Json);
             stream.Flush(true);
         }
-        File.Move(temporary, path, true);
+        // Readers and filesystem scanners can briefly deny replacement on Windows.
+        // Retry the same flushed file; never delete or partially overwrite the target.
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                RejectReparseAncestors(path);
+                File.Move(temporary, path, true);
+                return;
+            }
+            catch (Exception ex) when (attempt < 40 && OperatingSystem.IsWindows() &&
+                ex is IOException or UnauthorizedAccessException && (ex.HResult & 0xffff) is 5 or 32 or 33)
+            {
+                Thread.Sleep(50);
+            }
+        }
     }
 
     public static FileStream AcquireLock(string data)

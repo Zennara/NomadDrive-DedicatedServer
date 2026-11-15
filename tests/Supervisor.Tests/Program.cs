@@ -211,6 +211,47 @@ await Check("exclusive lock prevents concurrent import or supervisor", () => Syn
     using var held = SafeFiles.AcquireLock(data);
     Throws<IOException>(() => { using var another = SafeFiles.AcquireLock(data); });
 }));
+if (OperatingSystem.IsWindows())
+{
+    await Check("atomic status replacement survives a temporary Windows reader lock", async () =>
+    {
+        var directory = Path.Combine(root, "transient-status-lock");
+        var path = Path.Combine(directory, "status.json");
+        SafeFiles.AtomicJson(path, new { state = "old" });
+        using var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writing = Task.Run(() => { started.SetResult(); SafeFiles.AtomicJson(path, new { state = "new" }); });
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.Delay(200);
+            Require(!writing.IsCompleted, "Replacement completed while delete sharing was denied.");
+            Require(Protocol.Read<JsonElement>(path).GetProperty("state").GetString() == "old", "Old complete status changed while locked.");
+        }
+        finally { held.Dispose(); }
+        await writing.WaitAsync(TimeSpan.FromSeconds(5));
+        Require(Protocol.Read<JsonElement>(path).GetProperty("state").GetString() == "new", "Replacement did not recover after lock release.");
+        Require(!Directory.EnumerateFiles(directory, "*.tmp").Any(), "Successful replacement left a temporary file.");
+    });
+    await Check("permanent Windows replacement lock fails bounded without damaging status", () => Sync(() =>
+    {
+        var directory = Path.Combine(root, "permanent-status-lock");
+        var path = Path.Combine(directory, "status.json");
+        SafeFiles.AtomicJson(path, new { state = "old" });
+        var before = File.ReadAllBytes(path);
+        using var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var watch = Stopwatch.StartNew();
+        Exception? failure = null;
+        try { SafeFiles.AtomicJson(path, new { state = "new" }); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { failure = ex; }
+        Require(failure is not null, "A permanently locked destination unexpectedly succeeded.");
+        Require(watch.Elapsed >= TimeSpan.FromMilliseconds(500) && watch.Elapsed < TimeSpan.FromSeconds(6), "Replacement retries were absent or unbounded.");
+        Require(File.ReadAllBytes(path).SequenceEqual(before), "Failed replacement changed the existing record.");
+        var pending = Directory.EnumerateFiles(directory, "*.tmp").Single();
+        Require(Protocol.Read<JsonElement>(pending).GetProperty("state").GetString() == "new", "Flushed pending record was damaged.");
+    }));
+}
+
 await Check("orphan runtime guard blocks another supervisor even after lock is released", () => Sync(() =>
 {
     var directory = Path.Combine(root, "orphan");

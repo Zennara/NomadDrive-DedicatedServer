@@ -72,6 +72,9 @@ public sealed class Plugin : BaseUnityPlugin
             using (var stream = File.OpenRead(typeof(Player).Assembly.Location))
                 if (BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", "") != SupportedAssembly)
                     throw new Exception("Unsupported Assembly-CSharp build. Refusing version-specific patches; rebuild/review adapter first.");
+            TerrainWorkGuard.ValidateAssemblies();
+            TerrainWorkGuard.WorkerLimit = Config.Bind("Performance", "TerrainWorkerLimit", 4,
+                "Maximum background terrain workers. Grid changes wait for generation and apply work to finish; default 4.").Value;
             new Harmony("odin.nomaddrive.dedicatedserver").PatchAll(typeof(Plugin).Assembly);
             ConfigureSaveStorage();
             Application.runInBackground = true;

@@ -279,3 +279,41 @@ verify bounded failure preserves both the old JSON and flushed replacement.
 Atomic replacement retries only Windows access/sharing/lock violations for up to
 two seconds. Permanent failures still propagate; the denying reader in the live
 incident has not been identified. No destination deletion fallback is used.
+
+## Terrain worker retirement candidate
+
+The host now gates native MapMagic grid updates and refreshes until background
+generation and queued/active terrain apply work have finished. Deferred frames
+still pump apply work, avoiding a wait cycle while leaving EOS and other Unity
+updates running. Default terrain concurrency is four background workers,
+configurable with BepInEx `Performance.TerrainWorkerLimit`. Both MapMagic and
+Den.Tools assembly hashes are verified before patch installation.
+
+The guard operates at the complete grid-update boundary so dictionary keys,
+terrain coordinates, and transforms remain consistent. It never drops individual
+Move calls or blocks the game thread waiting for a worker. Startup-only native
+tile-settings changes and arbitrary third-party direct tile mutation are not
+covered; runtime changes through those paths need separate lifecycle review.
+
+Source review caught and corrected an active-only apply case: native
+`IsQueueEmpty` excludes a currently yielding routine. The guard uses `IsWorking`
+under the native enqueue lock. Native regression checks are in
+`tests/TerrainGuardProbe`. The native lifecycle suite passed 12 checks, including
+paused workers and an active-only apply routine. The final stress run passed
+15 checks: both distant destinations reached final applied terrain, 27 tiles
+were loaded, and no MapMagic exceptions occurred over 60.012 seconds. It recorded
+3,518 frames (58.6 FPS), maximum frame interval 0.204233 seconds, and 3,240
+admitted grid updates. All private hosts stopped through native saved shutdown.
+The supervisor regression suite passed all 44 checks.
+
+An earlier stress fixture appended observers only in LateUpdate, allowing
+FollowPlayers to remove them before native Update sampled the array. Its first
+timing-only pass was invalidated when a stronger check found neither destination
+had final terrain. The corrected probe pins stable demand immediately before
+MapMagic.Update and asserts each destination's generated/applied state. Retain
+the earlier failure as fixture evidence, not successful workload coverage.
+
+Private evidence: E:/Odin/scratch/nomad-drive/join-stall-fixes-20261116/guard-case/.
+These are three synthetic regions with zero remote clients, not a capacity
+benchmark. Remote multi-player acceptance, 680 km reconnects and sustained public
+performance remain unverified. No public runtime or world data was changed.

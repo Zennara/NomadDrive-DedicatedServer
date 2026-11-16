@@ -1,0 +1,69 @@
+﻿{
+    "checks":  [
+                   "Native world is ready and terrain settled",
+                   "Four background workers configured",
+                   "Running native worker is recognized",
+                   "Paused worker still prevents TileData reuse",
+                   "Grid update deferred while worker runs",
+                   "Apply callbacks continue while grid update deferred",
+                   "Refresh requests defer while worker runs",
+                   "Grid coordinates preserved during worker retirement",
+                   "Active-only yielding apply is recognized despite empty queue",
+                   "Grid update deferred for active-only apply",
+                   "Refresh deferred for active-only apply",
+                   "Deferred work drains without blocking game thread",
+                   "Both distant destinations have final applied terrain",
+                   "Three-region streaming emitted no MapMagic exceptions during sample",
+                   "Game frames continue during multi-region generation"
+               ],
+    "verifiedDate":  "2026-11-16",
+    "steamBuildId":  26391437,
+    "stress":  {
+                   "seconds":  60.012028999999991,
+                   "frames":  3518,
+                   "maxFrameSeconds":  0.20423290000000804,
+                   "terrainErrors":  0,
+                   "regions":  3,
+                   "finalDestinations":  2,
+                   "remoteClients":  0,
+                   "stressMapCalls":  3518,
+                   "stressAdmittedCalls":  3240,
+                   "workersBusy":  false,
+                   "applyBusy":  false,
+                   "tileCount":  27,
+                   "targets":  [
+                                   {
+                                       "x":  0,
+                                       "z":  8,
+                                       "exists":  true,
+                                       "distance":  0.0,
+                                       "generated":  true,
+                                       "applied":  true,
+                                       "started":  true,
+                                       "taskActive":  false,
+                                       "taskQueued":  false
+                                   },
+                                   {
+                                       "x":  0,
+                                       "z":  16,
+                                       "exists":  true,
+                                       "distance":  0.0,
+                                       "generated":  true,
+                                       "applied":  true,
+                                       "started":  true,
+                                       "taskActive":  false,
+                                       "taskQueued":  false
+                                   }
+                               ]
+               },
+    "gameVersion":  "1.0.1",
+    "sourceCommit":  "aecf5eb",
+    "runtimeChecksBeforeVersionOnlyRebuild":  true,
+    "passed":  true,
+    "limitations":  [
+                        "Synthetic observers, zero remote clients",
+                        "60 seconds is not sustained multiplayer capacity proof",
+                        "680 km reconnects unverified"
+                    ],
+    "releaseVersion":  "0.3.4.8"
+}

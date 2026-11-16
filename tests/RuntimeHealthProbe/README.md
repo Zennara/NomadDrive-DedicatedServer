@@ -6,4 +6,12 @@ Build with `dotnet build tests/RuntimeHealthProbe -c Release`. References use th
 
 After dedicated hosting reaches ready, the probe records body/collider counts, network object count, frame settings, and crowded cells. It measures a baseline, makes the initially dynamic bodies temporarily kinematic, measures again, then restores their velocities and dynamic state in a finally block and measures once more. It writes `runtime-health.json` into the isolated test directory. Stop the isolated host and restore the test runtime after collecting results.
 
-This changes physics in the disposable world copy. It is not a production optimization or a vehicle cleanup tool. Scripts that change body state during the measurement can affect the comparison. Frame and CPU samples include all process work and are diagnostic observations, not per-method profiling.
+Each measurement also records elapsed time and invocation counts around existing
+`UnityEngine.PlayerLoop` systems using sibling timing callbacks. The callbacks
+preserve the original systems and their order, and are removed when the probe is
+destroyed. Parent and child timings overlap: do not add them together. Timings
+that cross a measurement boundary are omitted. This works with the pinned game
+build's stripped Unity assemblies, which do not expose `ProfilerRecorder.StartNew`
+or `ProfilerRecorderHandle.GetAvailable`.
+
+This changes physics in the disposable world copy. It is not a production optimization or a vehicle cleanup tool. Scripts that change body state during the measurement can affect the comparison. Frame and CPU samples include all process work and are diagnostic observations. Loop timings identify engine phases, not individual native functions or managed methods.

@@ -8,6 +8,7 @@ using HarmonyLib;
 using Mirror;
 using Newtonsoft.Json;
 using UnityEngine;
+using UnityEngine.LowLevel;
 
 namespace NomadDrive.RuntimeHealthProbe;
 
@@ -20,6 +21,10 @@ public sealed class Probe : BaseUnityPlugin
     private double lastFrame;
     private readonly List<double> frames=new List<double>();
     private bool measuring;
+    private readonly Dictionary<string,LoopTiming> loopTimings=new Dictionary<string,LoopTiming>();
+    private sealed class LoopTiming { public long start,total,calls,max; }
+    private struct BeginTiming { }
+    private struct EndTiming { }
     private void Awake()
     {
         root=Environment.GetEnvironmentVariable("ND_RUNTIME_HEALTH_TEST_ROOT");
@@ -50,7 +55,10 @@ public sealed class Probe : BaseUnityPlugin
     private void Update()
     {
         var now=Time.realtimeSinceStartupAsDouble;
-        if(measuring&&lastFrame>0)frames.Add(now-lastFrame);
+        if(measuring&&lastFrame>0)
+        {
+            frames.Add(now-lastFrame);
+        }
         lastFrame=now;
     }
     private IEnumerator Run()
@@ -59,6 +67,7 @@ public sealed class Probe : BaseUnityPlugin
         while(!NetworkServer.active||host==null||AccessTools.Field(host,"Instance")?.GetValue(null)==null||
             !(bool)(AccessTools.Field(host,"ready")?.GetValue(AccessTools.Field(host,"Instance").GetValue(null))??false))yield return null;
         yield return new WaitForSecondsRealtime(3);
+        PlayerLoop.SetPlayerLoop(AddTimings(PlayerLoop.GetCurrentPlayerLoop()));
         var bodies=UnityEngine.Object.FindObjectsByType<Rigidbody>(FindObjectsInactive.Include,FindObjectsSortMode.None);
         var dynamic=bodies.Where(b=>b!=null&&b.gameObject.activeInHierarchy&&!b.isKinematic).ToArray();
         results.Add(new {phase="inventory",rigidbodies=bodies.Length,dynamicBodies=dynamic.Length,
@@ -81,13 +90,44 @@ public sealed class Probe : BaseUnityPlugin
     private IEnumerator Measure(string phase,int seconds)
     {
         frames.Clear();lastFrame=0;measuring=true;
+        foreach(var timing in loopTimings.Values){timing.start=timing.total=timing.calls=timing.max=0;}
         var process=System.Diagnostics.Process.GetCurrentProcess();
         var cpu=process.TotalProcessorTime.TotalSeconds;var start=Time.realtimeSinceStartupAsDouble;
         yield return new WaitForSecondsRealtime(seconds);
         measuring=false;process.Refresh();var elapsed=Time.realtimeSinceStartupAsDouble-start;
         results.Add(new {phase,elapsed,frames=frames.Count,maxFrameSeconds=frames.Count==0?0:frames.Max(),
-            framesPerSecond=frames.Count/elapsed,cpuPercent=(process.TotalProcessorTime.TotalSeconds-cpu)/elapsed/Environment.ProcessorCount*100});
+            framesPerSecond=frames.Count/elapsed,cpuPercent=(process.TotalProcessorTime.TotalSeconds-cpu)/elapsed/Environment.ProcessorCount*100,
+            loopTimings=loopTimings.Select(p=>new {name=p.Key,calls=p.Value.calls,totalMilliseconds=p.Value.total*1000.0/System.Diagnostics.Stopwatch.Frequency,
+                maxMilliseconds=p.Value.max*1000.0/System.Diagnostics.Stopwatch.Frequency}).ToArray()});
         File.WriteAllText(Path.Combine(root,"runtime-health.json"),JsonConvert.SerializeObject(results,Formatting.Indented));
         process.Dispose();
     }
+    private PlayerLoopSystem AddTimings(PlayerLoopSystem system)
+    {
+        if(system.subSystemList==null)return system;
+        var children=new List<PlayerLoopSystem>();
+        foreach(var original in system.subSystemList)
+        {
+            var child=AddTimings(original);
+            var name=child.type?.FullName??"";
+            var timed=name.StartsWith("UnityEngine.PlayerLoop.",StringComparison.Ordinal);
+            if(!timed){children.Add(child);continue;}
+            if(!loopTimings.TryGetValue(name,out var timing)){timing=new LoopTiming();loopTimings.Add(name,timing);}
+            children.Add(new PlayerLoopSystem {type=typeof(BeginTiming),updateDelegate=()=>{if(measuring)timing.start=System.Diagnostics.Stopwatch.GetTimestamp();}});
+            children.Add(child);
+            children.Add(new PlayerLoopSystem {type=typeof(EndTiming),updateDelegate=()=>{
+                if(!measuring||timing.start==0)return;
+                var ticks=System.Diagnostics.Stopwatch.GetTimestamp()-timing.start;
+                timing.start=0;timing.total+=ticks;timing.calls++;timing.max=Math.Max(timing.max,ticks);
+            }});
+        }
+        system.subSystemList=children.ToArray();return system;
+    }
+    private static PlayerLoopSystem RemoveTimings(PlayerLoopSystem system)
+    {
+        if(system.subSystemList!=null)system.subSystemList=system.subSystemList
+            .Where(s=>s.type!=typeof(BeginTiming)&&s.type!=typeof(EndTiming)).Select(RemoveTimings).ToArray();
+        return system;
+    }
+    private void OnDestroy(){PlayerLoop.SetPlayerLoop(RemoveTimings(PlayerLoop.GetCurrentPlayerLoop()));}
 }

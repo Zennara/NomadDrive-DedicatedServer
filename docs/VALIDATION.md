@@ -317,3 +317,19 @@ Private evidence: E:/Odin/scratch/nomad-drive/join-stall-fixes-20261116/guard-ca
 These are three synthetic regions with zero remote clients, not a capacity
 benchmark. Remote multi-player acceptance, 680 km reconnects and sustained public
 performance remain unverified. No public runtime or world data was changed.
+
+## 0.3.5.9 collider grid stall
+
+Two production snapshots from the same frozen process identified the game
+thread in ColliderLodSpatialGrid.QueryRing, called by ColliderLODManager.LateUpdate.
+The native method scans every cell in a square whose size grows with the
+movement-derived radius. The host patch keeps native small queries and checks
+existing buckets for large queries, keeping the native candidate boundaries
+and downstream collider decisions. Oversized radii consider all existing cells.
+
+Seven isolated game checks passed on game 1.0.1, Steam build 26391437, including
+patch installation, signed coordinates, boundary membership, coordinate wrap,
+and finite oversized and infinite radii. The private world saved and stopped.
+The supervisor suite passed 44 checks. Sustained remote play and the specific
+source of the captured radius have not been verified.
+Evidence is in docs/evidence/collider-grid-20261118.json.

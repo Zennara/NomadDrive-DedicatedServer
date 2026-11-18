@@ -9,6 +9,7 @@ using Den.Tools.Tasks;
 using HarmonyLib;
 using MapMagic.Core;
 using Newtonsoft.Json;
+using NomadDrive.Features.ColliderLOD;
 using UnityEngine;
 
 namespace NomadDrive.TerrainGuardProbe;
@@ -71,6 +72,73 @@ public sealed class Probe : BaseUnityPlugin
     private IEnumerator HeldApply()
     { while (!releaseApply) yield return null; }
 
+    private sealed class GridTarget : IColliderLodTarget
+    {
+        public Transform transform => null;
+        public bool ParticipatesInColliderLod => true;
+        public bool LodPositionMayChange => false;
+        public Collider[] GetRigidColliders() => Array.Empty<Collider>();
+        public void SetLodColliderActive(bool active) { }
+    }
+
+    private void CheckColliderGrid()
+    {
+        var query = AccessTools.Method(typeof(ColliderLodSpatialGrid), nameof(ColliderLodSpatialGrid.QueryRing));
+        Check(Harmony.GetPatchInfo(query)?.Prefixes.Any(patch => patch.owner == "odin.nomaddrive.dedicatedserver") == true,
+            "The dedicated server installed the collider grid prefix");
+
+        // Populate precise signed coordinates without creating Unity objects or changing the world's grid.
+        var grid = new ColliderLodSpatialGrid(1f);
+        var buckets = (Dictionary<long, List<ColliderLodEntry>>)AccessTools.Field(typeof(ColliderLodSpatialGrid), "_cells").GetValue(grid);
+        var target = new GridTarget();
+        ColliderLodEntry Add(int x, int z)
+        {
+            var entry = new ColliderLodEntry(target);
+            long key = ((long)x << 32) | (uint)z;
+            if (!buckets.TryGetValue(key, out var bucket))
+                buckets.Add(key, bucket = new List<ColliderLodEntry>());
+            bucket.Add(entry);
+            return entry;
+        }
+
+        var center = Add(-2, -3);
+        var nearby = Add(-1, -4);
+        var nearbyDuplicateCell = Add(-1, -4);
+        var boundary = Add(7, -12);
+        var outsideBoundary = Add(-12, -3);
+        const int wrapCenter = 2147483520; // Greatest representable float below Int32.MaxValue.
+        var wrapOrigin = Add(wrapCenter, 0);
+        var wrapNeighbor = Add(int.MinValue + 1, 0);
+        var outsideWrap = Add(int.MinValue + 2, 0);
+        var results = new HashSet<ColliderLodEntry>();
+        var position = new Vector3(-1.5f, 0, -2.5f);
+
+        grid.QueryRing(position, 0.25f, results);
+        Check(results.SetEquals(new[] { center, nearby, nearbyDuplicateCell }),
+            "The small native ring floors negative coordinates and returns every entry in a populated bucket");
+        results.Clear();
+        results.Add(outsideBoundary);
+        grid.QueryRing(position, 8.25f, results);
+        Check(results.SetEquals(new[] { center, nearby, nearbyDuplicateCell, boundary, outsideBoundary }),
+            "The sparse ring rounds up, includes the square boundary, and preserves existing results");
+        results.Clear();
+        grid.QueryRing(position, 8.25f, results);
+        Check(results.SetEquals(new[] { center, nearby, nearbyDuplicateCell, boundary }),
+            "The sparse ring excludes the first outside bucket");
+        results.Clear();
+        grid.QueryRing(new Vector3(wrapCenter, 0, 0), 129f, results);
+        Check(results.SetEquals(new[] { wrapOrigin, wrapNeighbor }),
+            "Sparse filtering matches the native signed-coordinate wrap and boundary");
+        results.Clear();
+        grid.QueryRing(position, float.MaxValue, results);
+        Check(results.SetEquals(buckets.Values.SelectMany(bucket => bucket)) && results.Contains(outsideWrap),
+            "An oversized finite radius completes and visits every populated bucket");
+        results.Clear();
+        grid.QueryRing(position, float.PositiveInfinity, results);
+        Check(results.SetEquals(buckets.Values.SelectMany(bucket => bucket)),
+            "An infinite radius completes and visits every populated bucket");
+    }
+
     private IEnumerator Run()
     {
         guard = AccessTools.TypeByName("NomadDrive.DedicatedServer.TerrainWorkGuard") ?? throw new Exception("Candidate guard not installed");
@@ -81,6 +149,11 @@ public sealed class Probe : BaseUnityPlugin
         {
             if (Time.realtimeSinceStartupAsDouble > deadline) throw new Exception("Host never settled");
             yield return null;
+        }
+        if (Environment.GetEnvironmentVariable("ND_COLLIDER_GRID_TEST") == "1")
+        {
+            CheckColliderGrid();
+            yield break;
         }
         var map = UnityEngine.Object.FindAnyObjectByType<MapMagicObject>();
         Check(map != null, "Native world is ready and terrain settled");

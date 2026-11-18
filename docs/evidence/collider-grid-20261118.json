@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "checks": [
+    "The dedicated server installed the collider grid prefix",
+    "The small native ring floors negative coordinates and returns every entry in a populated bucket",
+    "The sparse ring rounds up, includes the square boundary, and preserves existing results",
+    "The sparse ring excludes the first outside bucket",
+    "Sparse filtering matches the native signed-coordinate wrap and boundary",
+    "An oversized finite radius completes and visits every populated bucket",
+    "An infinite radius completes and visits every populated bucket"
+  ],
+  "stressResult": null
+}

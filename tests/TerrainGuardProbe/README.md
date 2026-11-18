@@ -13,6 +13,12 @@ queue is empty but a routine is unfinished. It checks that deferred work drains
 after release. Holds and waits are bounded; cleanup releases both held tasks.
 Results are written to `terrain-guard.json` inside the test root.
 
+Set `ND_COLLIDER_GRID_TEST=1` to run just the collider grid regression after
+startup. The probe verifies the server patch is installed and calls the game's
+patched `QueryRing` with a private grid. It checks small and sparse queries,
+negative and wrapped cell coordinates, inclusive boundaries, and oversized
+radii. It does not modify world colliders or player state.
+
 Set `ND_TERRAIN_GUARD_STRESS=1` for an additional 60-second sample with two
 temporary observers 8 and 16 tiles from the initial observer. It records frames,
 maximum frame interval, and terrain exceptions while three regions stream.

@@ -78,13 +78,17 @@ public sealed class CrashBudget(RecoveryConfig config, TimeProvider? clock = nul
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly Queue<DateTimeOffset> _attempts = new();
-    public bool TrySpend()
+    public bool HasAttempt()
     {
         if (!config.Enabled) return false;
         var now = _clock.GetUtcNow();
         while (_attempts.TryPeek(out var timestamp) && now - timestamp >= TimeSpan.FromMinutes(config.WindowMinutes)) _attempts.Dequeue();
-        if (_attempts.Count >= config.MaxAttempts) return false;
-        _attempts.Enqueue(now);
+        return _attempts.Count < config.MaxAttempts;
+    }
+    public bool TrySpend()
+    {
+        if (!HasAttempt()) return false;
+        _attempts.Enqueue(_clock.GetUtcNow());
         return true;
     }
 }

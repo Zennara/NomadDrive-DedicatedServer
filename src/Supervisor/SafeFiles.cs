@@ -121,6 +121,25 @@ public static partial class SafeFiles
         return world;
     }
 
+    public static async Task WithVerifiedCheckpointAsync(string data, string slotId, Func<Task> action)
+    {
+        if (ReadWorld(data)?.SlotId != slotId || string.IsNullOrEmpty(slotId))
+            throw new InvalidDataException("The offline host did not identify the selected world.");
+        var slot = Path.Combine(data, "saves", slotId);
+        // Prevent a native writer or replacement from changing the verified pair before the child exits.
+        using var metadata = File.OpenRead(Path.Combine(slot, "meta.json"));
+        var saved = JsonSerializer.Deserialize<CheckpointMetadata>(metadata, Protocol.Json);
+        if (saved?.SlotId != slotId || saved.ContentFile != "save.dat" || saved.ContentSize <= 0)
+            throw new InvalidDataException("The selected world has no complete save.dat metadata.");
+        using var content = File.OpenRead(Path.Combine(slot, "save.dat"));
+        if (content.Length != saved.ContentSize ||
+            !string.Equals(Convert.ToHexString(SHA256.HashData(content)), saved.ContentHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("The selected save.dat does not match its size and SHA-256 metadata.");
+        await action();
+    }
+
+    private sealed record CheckpointMetadata(string SlotId, string ContentFile, long ContentSize, string ContentHash);
+
     [GeneratedRegex("^slot_[a-zA-Z0-9_-]{1,100}$", RegexOptions.CultureInvariant)]
     private static partial Regex SlotPattern();
 }

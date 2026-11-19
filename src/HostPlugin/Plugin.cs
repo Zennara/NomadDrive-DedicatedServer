@@ -29,6 +29,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     internal static Plugin Instance;
     internal static GameSaveService Saves;
+    internal static EvilSaveManager SaveDisk;
     internal static JObject Settings;
     internal static string DataRoot, RunRoot;
     internal static bool SaveAuthorized;
@@ -41,6 +42,7 @@ public sealed class Plugin : BaseUnityPlugin
     internal static Vector3? ImportAnchor;
     internal static int HumanLimit => (int)Settings["lobby"]["maxPlayers"];
     private bool busy, ready, failed;
+    private bool networkStopped, terminalStatusPublished;
     private bool hasTravelAnchor;
     private bool closing;
     private readonly HashSet<NetworkConnectionToClient> pendingPlayers = new HashSet<NetworkConnectionToClient>();
@@ -160,12 +162,21 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void Update()
     {
-        if (Instance != this || failed || Time.realtimeSinceStartup < pollAt) return;
+        if (Instance != this || Time.realtimeSinceStartup < pollAt) return;
         pollAt = Time.realtimeSinceStartup + 0.5f;
+        if (failed)
+        {
+            if (networkStopped && !terminalStatusPublished) WriteStatus();
+            return;
+        }
         try
         {
             FollowPlayers();
-            if (ready && (!NetworkServer.active || !NetworkClient.activeHost)) throw new Exception("Host networking stopped unexpectedly.");
+            if (ready && (!NetworkServer.active || !NetworkClient.activeHost))
+            {
+                networkStopped = !closing;
+                throw new Exception("Host networking stopped unexpectedly.");
+            }
             if (!ready && world != null && world.IsWorldFullyReady && AppliedTiles > 0 && Saves != null &&
                 (!Saves.IsLoadedWorld || RestoreCompleted) && !Saves.IsRestoring && Saves.CanSaveNow)
             {
@@ -399,11 +410,15 @@ public sealed class Plugin : BaseUnityPlugin
     {
         try
         {
+            var offline = networkStopped && !NetworkServer.active && !NetworkClient.active &&
+                !busy && !closing && !pluginCheckpoint && SaveDisk != null && !SaveDisk.IsSaving;
             AtomicJson(Path.Combine(RunRoot, "status.json"), new {
                 state = failed ? "error" : ready ? "ready" : "starting", detail,
+                terminalNetworkStop = offline,
                 slotId = Saves?.ActiveSlotId, players = NetworkServer.connections.Values.Count(c => !(c is LocalConnectionToClient) && c.identity != null),
                 maxPlayers = HumanLimit, lobbyCode = lobby == null ? null : ((IEOSLobbyManager)lobby).JoinCode, updatedUtc = DateTime.UtcNow.ToString("O")
             });
+            terminalStatusPublished = offline;
         }
         catch (IOException ex)
         {
@@ -451,7 +466,12 @@ public sealed class Plugin : BaseUnityPlugin
 internal static class CaptureSaveService
 {
     static MethodBase TargetMethod() => typeof(GameSaveService).GetConstructors().Single();
-    static void Postfix(GameSaveService __instance) { Plugin.Saves = __instance; __instance.OnRestoreComplete += () => Plugin.RestoreCompleted = true; }
+    static void Postfix(GameSaveService __instance, IEvilSaveManager __0)
+    {
+        Plugin.Saves = __instance;
+        Plugin.SaveDisk = __0 as EvilSaveManager;
+        __instance.OnRestoreComplete += () => Plugin.RestoreCompleted = true;
+    }
 }
 
 [HarmonyPatch(typeof(EvilSaveSettings), nameof(EvilSaveSettings.GetSaveRootPath))]

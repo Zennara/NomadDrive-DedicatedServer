@@ -43,7 +43,7 @@ public sealed class ServerRunner(ServerConfig config, Action<string> log)
                     if (!game.HasExited)
                     {
                         log("Terminating failed startup. No ready server session was established.");
-                        game.TerminateFailedStartup();
+                        game.TerminateFailedProcess();
                         if (!await game.WaitForExitAsync(TimeSpan.FromSeconds(config.ShutdownTimeoutSeconds)))
                             throw new IOException("Failed startup process did not terminate; refusing to launch another process.");
                     }
@@ -56,10 +56,43 @@ public sealed class ServerRunner(ServerConfig config, Action<string> log)
                 SetStatus("ready", "Accepting commands.");
                 string? plannedExit = null;
                 bool wasUnhealthy = false;
+                string? recoveryBlocked = null;
+                int checkpointLockRetries = 0;
+                DateTimeOffset nextCheckpointCheck = DateTimeOffset.MinValue;
                 while (!game.HasExited)
                 {
                     _status.Game = Protocol.Read<PluginStatus>(Path.Combine(game.RunDirectory, "status.json"), tolerateSharingViolation: true);
                     var healthProblem = HostHealth.Problem(_status.Game, DateTimeOffset.UtcNow, TimeSpan.FromSeconds(config.CommandTimeoutSeconds));
+                    if (recoveryBlocked == null && DateTimeOffset.UtcNow >= nextCheckpointCheck && !_stopRequested && plannedExit == null &&
+                        _status.Game is { State: "error", TerminalNetworkStop: true, Players: 0 } terminal &&
+                        !operations.CommandsUncertain && !operations.ShutdownRequested)
+                    {
+                        bool checkpointPinned = false;
+                        try
+                        {
+                            if (!crashes.HasAttempt())
+                                throw new InvalidDataException("No automatic crash recovery attempts are available. Inspect the failed run before restarting.");
+                            await SafeFiles.WithVerifiedCheckpointAsync(config.DataDirectory, terminal.SlotId, async () =>
+                            {
+                                checkpointPinned = true;
+                                log("Host networking stopped. Verified the completed checkpoint; terminating the offline game without another save.");
+                                game.TerminateFailedProcess();
+                                if (!await game.WaitForExitAsync(TimeSpan.FromSeconds(config.ShutdownTimeoutSeconds)))
+                                    throw new TimeoutException("The offline game did not terminate. No replacement game was launched.");
+                            });
+                            break;
+                        }
+                        catch (IOException ex) when (!checkpointPinned && (ex.HResult & 0xffff) is 32 or 33 && checkpointLockRetries < 5)
+                        {
+                            nextCheckpointCheck = DateTimeOffset.UtcNow.AddMilliseconds(250 << checkpointLockRetries++);
+                            log("Checkpoint verification encountered a sharing violation; retrying while the host remains offline.");
+                        }
+                        catch (Exception ex) when (!checkpointPinned && ex is (IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidDataException))
+                        {
+                            recoveryBlocked = "Offline host recovery blocked: " + ex.Message;
+                        }
+                    }
+                    healthProblem = recoveryBlocked ?? healthProblem;
                     if (healthProblem is not null) SetStatus("attention", healthProblem);
                     else if (wasUnhealthy && !operations.CommandsUncertain && !operations.ShutdownAcknowledged) SetStatus("ready", "Hosting plugin heartbeat recovered; accepting commands.");
                     wasUnhealthy = healthProblem is not null;

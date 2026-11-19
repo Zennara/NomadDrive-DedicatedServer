@@ -20,6 +20,7 @@ public sealed class CommandResponse
 }
 public sealed class PluginStatus
 {
+    public bool TerminalNetworkStop { get; set; }
     public string State { get; set; } = "starting";
     public string Detail { get; set; } = "";
     public string SlotId { get; set; } = "";
@@ -133,7 +134,7 @@ public sealed class GameSession(Process process, string runDirectory, int comman
         try { await process.WaitForExitAsync(cancellation.Token); return true; }
         catch (OperationCanceledException) { return false; }
     }
-    public void TerminateFailedStartup()
+    public void TerminateFailedProcess()
     {
         if (!process.HasExited) process.Kill(entireProcessTree: true);
     }

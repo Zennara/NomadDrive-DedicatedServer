@@ -542,6 +542,49 @@ await Check("host error and stale heartbeat suspend scheduled work", () => Sync(
     Require(HostHealth.Problem(status, now, grace)?.Contains("stale") == true, "Stale heartbeat was not detected.");
     Require(HostHealth.Problem(null, now, grace) is not null, "Missing heartbeat was not detected.");
 }));
+await Check("offline recovery pins the selected completed checkpoint through process exit", async () =>
+{
+    var data = Path.Combine(root, "terminal-recovery");
+    const string slotId = "slot_recovery";
+    var slot = Path.Combine(data, "saves", slotId);
+    Directory.CreateDirectory(slot);
+    SafeFiles.AtomicJson(Path.Combine(data, "world.json"), new WorldSelection { SlotId = slotId });
+    var bytes = "completed world"u8.ToArray();
+    var save = Path.Combine(slot, "save.dat");
+    var meta = Path.Combine(slot, "meta.json");
+    File.WriteAllBytes(save, bytes);
+    SafeFiles.AtomicJson(meta, new { slotId, contentFile = "save.dat", contentSize = bytes.Length,
+        contentHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant() });
+    var calls = 0;
+    Task Exit()
+    {
+        calls++;
+        if (OperatingSystem.IsWindows())
+        {
+            Throws<IOException>(() => File.OpenWrite(save).Dispose());
+            Throws<IOException>(() => File.OpenWrite(meta).Dispose());
+        }
+        return Task.CompletedTask;
+    }
+    await SafeFiles.WithVerifiedCheckpointAsync(data, slotId, Exit);
+    async Task Refused(string reported)
+    {
+        try { await SafeFiles.WithVerifiedCheckpointAsync(data, reported, Exit); }
+        catch (InvalidDataException) { return; }
+        throw new Exception("Unverified checkpoint authorized termination.");
+    }
+    await Refused("slot_other");
+    Array.Reverse(bytes);
+    File.WriteAllBytes(save, bytes);
+    await Refused(slotId);
+    File.WriteAllBytes(save, []);
+    await Refused(slotId);
+    File.WriteAllBytes(save, bytes);
+    SafeFiles.AtomicJson(meta, new { slotId, contentFile = "../other.dat", contentSize = bytes.Length,
+        contentHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)) });
+    await Refused(slotId);
+    Require(calls == 1, "Invalid save metadata reached the termination callback.");
+});
 await Check("IPC rejects mismatched response IDs", async () =>
 {
     var directory = Path.Combine(root, "badipc");

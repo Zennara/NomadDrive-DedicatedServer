@@ -15,3 +15,7 @@ build's stripped Unity assemblies, which do not expose `ProfilerRecorder.StartNe
 or `ProfilerRecorderHandle.GetAvailable`.
 
 This changes physics in the disposable world copy. It is not a production optimization or a vehicle cleanup tool. Scripts that change body state during the measurement can affect the comparison. Frame and CPU samples include all process work and are diagnostic observations. Loop timings identify engine phases, not individual native functions or managed methods.
+
+For terminal network recovery, also set `ND_VERIFY_NETWORK_RECOVERY=1`. Use a fresh private lobby with crash recovery enabled. After the supervisor reports ready and a manual backup succeeds, create `stop-network.once` in the test root. The probe consumes it and calls Mirror's native `StopHost()` once. Verify that the supervisor reports the verified checkpoint, changes the game PID and run directory, returns to ready on the same slot, and completes a graceful stop. Check the backup hash before and after recovery.
+
+To exercise Windows sharing violations, open that disposable slot's `meta.json` with `FileShare.None` before writing the trigger. Wait for two checkpoint sharing-violation retries and verify the old PID is still running. Release the handle and check that the replacement reaches ready on the original checkpoint and completes a graceful stop.

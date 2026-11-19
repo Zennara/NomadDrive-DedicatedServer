@@ -67,6 +67,15 @@ public sealed class Probe : BaseUnityPlugin
         while(!NetworkServer.active||host==null||AccessTools.Field(host,"Instance")?.GetValue(null)==null||
             !(bool)(AccessTools.Field(host,"ready")?.GetValue(AccessTools.Field(host,"Instance").GetValue(null))??false))yield return null;
         yield return new WaitForSecondsRealtime(3);
+        if (Environment.GetEnvironmentVariable("ND_VERIFY_NETWORK_RECOVERY") == "1")
+        {
+            // The driver writes this file only after a completed native backup. Consume it once across restarts.
+            var trigger = Path.Combine(root, "stop-network.once");
+            while (!File.Exists(trigger)) yield return new WaitForSecondsRealtime(0.25f);
+            File.Move(trigger, Path.Combine(root, "stop-network.consumed"));
+            NetworkManager.singleton.StopHost();
+            yield break;
+        }
         PlayerLoop.SetPlayerLoop(AddTimings(PlayerLoop.GetCurrentPlayerLoop()));
         var bodies=UnityEngine.Object.FindObjectsByType<Rigidbody>(FindObjectsInactive.Include,FindObjectsSortMode.None);
         var dynamic=bodies.Where(b=>b!=null&&b.gameObject.activeInHierarchy&&!b.isKinematic).ToArray();

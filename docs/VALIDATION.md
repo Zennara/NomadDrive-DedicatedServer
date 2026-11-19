@@ -333,3 +333,17 @@ and finite oversized and infinite radii. The private world saved and stopped.
 The supervisor suite passed 44 checks. Sustained remote play and the specific
 source of the captured radius have not been verified.
 Evidence is in docs/evidence/collider-grid-20261118.json.
+
+## Unexpected host network shutdown
+
+On November 18, 2026, two private lobbies running Nomad Drive 1.0.1 (Steam build 26391437)
+completed a backup and then ran Mirror's `StopHost()`. Each supervisor verified the native
+checkpoint, terminated its offline child, and started the same slot in a new process.
+The checkpoint and backup SHA-256 values matched their pre-failure values when the
+replacement reached ready. Both replacement hosts completed a save and graceful stop.
+
+In the second run an exclusive Windows handle on `meta.json` blocked verification.
+The supervisor kept the original process alive through two sharing violations and
+recovered after the handle closed. The 45 supervisor checks passed, including refusal
+of wrong-slot, truncated, and same-size corrupt checkpoint data. These runs used zero
+remote players. See `tests/RuntimeHealthProbe/README.md` for the native test procedure.

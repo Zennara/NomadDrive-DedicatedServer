@@ -28,7 +28,6 @@ internal sealed class PanelWindow : Form
     internal PanelWindow(PanelProfiles profiles)
     {
         this.profiles = profiles;
-        Text = "Nomad Drive | Server panel";
         Size = new(940, 620); MinimumSize = new(780, 510);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 10);
@@ -74,10 +73,14 @@ internal sealed class PanelWindow : Form
         autoStart.Click += (_, _) => ChangeStartup(true);
         autoPanel.Click += (_, _) => ChangeStartup(false);
         mods.SelectedIndexChanged += (_, _) => EnableActions();
-        timer.Tick += async (_, _) => await RefreshAsync();
+        timer.Tick += async (_, _) => { if (Visible) await RefreshAsync(); };
         tabs.SelectedIndexChanged += async (_, _) => await RefreshAsync();
         logKind.SelectedIndexChanged += async (_, _) => await RefreshAsync();
-        VisibleChanged += async (_, _) => { timer.Enabled = Visible; if (Visible) await RefreshAsync(); };
+        VisibleChanged += async (_, _) =>
+        {
+            if (Visible) await RefreshAsync();
+        };
+        Shown += (_, _) => timer.Start();
         var nearby = PanelProfiles.DefaultConfigPath;
         if (profiles.IsFirstRun && nearby != null) profiles.Add(Path.GetFileName(Path.GetDirectoryName(nearby)) ?? "Server", nearby);
         Bind(null);
@@ -121,11 +124,24 @@ internal sealed class PanelWindow : Form
     {
         backend = Selected is { } p ? new PanelBackend(p.ConfigPath) : null;
         snapshot = null; mods.Items.Clear(); roster.Items.Clear(); logs.Clear(); announcement.Clear();
+        UpdateTitle();
         feedback.Text = Selected is { } s ? outcomes.GetValueOrDefault(s.ConfigPath, s.ConfigPath) : "Open an existing server config or create one.";
         status.Text = backend == null ? "No profile selected" : "Checking server…";
         autoStart.Checked = Selected?.AutoStart == true; autoPanel.Checked = profiles.StartPanelAtSignIn;
         EnableActions(); _ = RefreshAsync();
     }
+    private void UpdateTitle()
+    {
+        var name = snapshot?.ServerName ?? Selected?.Name;
+        Text = snapshot switch
+        {
+            { PlayerCountKnown: true } live => $"{name} ({live.Players}/{live.MaxPlayers})",
+            { Running: false } stopped => $"{name} (0/{stopped.MaxPlayers}, stopped)",
+            { } pending => $"{name} (?/{pending.MaxPlayers})",
+            _ => name ?? "Nomad Drive | Server panel"
+        };
+    }
+
     private async Task RefreshAsync()
     {
         var current = backend;
@@ -136,6 +152,7 @@ internal sealed class PanelWindow : Form
             var state = await current.StatusAsync();
             if (backend != current || IsDisposed) return;
             snapshot = state;
+            UpdateTitle();
             status.Text = $"{state.State.ToUpperInvariant()}    {state.Detail}" +
                 (state.PlayerCountKnown ? $"    Players {state.Players}/{state.MaxPlayers}    Lobby {state.LobbyCode}"
                     : state.Running ? "    Player count unavailable" : "");
@@ -164,7 +181,7 @@ internal sealed class PanelWindow : Form
         }
         catch (Exception e)
         {
-            if (backend == current && !IsDisposed) { snapshot = null; status.Text = e.Message; roster.Items.Clear(); }
+            if (backend == current && !IsDisposed) { snapshot = null; UpdateTitle(); status.Text = e.Message; roster.Items.Clear(); }
         }
         finally
         {

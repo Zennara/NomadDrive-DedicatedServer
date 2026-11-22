@@ -10,6 +10,7 @@ internal static class Program
         var dir = Directory.CreateDirectory(Path.Combine(args.Single(),Guid.NewGuid().ToString("N"))).FullName;
         var path = Path.Combine(dir,"server.json");
         var config = new ServerConfig();
+        config.Lobby.Name = "Test lobby";
         File.WriteAllText(path,JsonSerializer.Serialize(config,ServerConfig.Json));
         var profiles = new PanelProfiles(dir,_ => throw new Exception("Unexpected sign-in registration"));
         profiles.Add("Test server",path);
@@ -20,6 +21,7 @@ internal static class Program
         var form = Application.OpenForms.OfType<PanelWindow>().Single();
         var tabs = Find<TabControl>(form).Single();
         Wait(() => Find<Button>(form).Single(b => b.Text=="Start").Enabled);
+        Check(form.Text == "Test lobby (0/4, stopped)", "Stopped title uses the configured server name and capacity");
         Check(tabs.TabPages.Count==4 && form.Visible,"Server, Mods, Settings and Logs open on a stopped profile");
         using (var image = new Bitmap(form.Width,form.Height))
         {
@@ -31,6 +33,22 @@ internal static class Program
         Check(!form.IsDisposed && !form.Visible,"Window close hides to the tray");
         signal.Set(); Wait(()=>form.Visible);
         Check(Application.OpenForms.OfType<PanelWindow>().Count()==1,"Open signal restores the existing window");
+        var resolved = ServerConfig.Load(path);
+        var run = Directory.CreateDirectory(Path.Combine(resolved.DataDirectory,"runs","fixture")).FullName;
+        SafeFiles.AtomicJson(Path.Combine(resolved.DataDirectory,"supervisor.json"),
+            new SupervisorStatus { State = "ready", RunDirectory = run });
+        var heartbeat = Path.Combine(run,"status.json");
+        var game = new PluginStatus { State = "ready", Players = 2, MaxPlayers = 15, UpdatedUtc = DateTimeOffset.UtcNow };
+        SafeFiles.AtomicJson(heartbeat,game);
+        Wait(() => form.Text == "Test lobby (2/15)");
+        game.Players = 3;
+        SafeFiles.AtomicJson(heartbeat,game);
+        Wait(() => form.Text == "Test lobby (3/15)");
+        Check(form.Text == "Test lobby (3/15)", "Title refreshes when live occupancy changes");
+        game.UpdatedUtc = DateTimeOffset.UtcNow.AddHours(-1);
+        SafeFiles.AtomicJson(heartbeat,game);
+        Wait(() => form.Text == "Test lobby (?/4)");
+        Check(form.Text == "Test lobby (?/4)", "Stale occupancy shows as unknown");
         using (var settings = new SettingsWindow(path))
         {
             settings.Show(); Application.DoEvents();

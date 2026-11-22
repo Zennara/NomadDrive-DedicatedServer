@@ -7,7 +7,7 @@ using NomadDrive.Server;
 
 namespace NomadDrive.Panel;
 
-internal sealed record PanelStatus(bool Running, string State, string Detail, string LobbyCode,
+internal sealed record PanelStatus(string ServerName, bool Running, string State, string Detail, string LobbyCode,
     int Players, int MaxPlayers, IReadOnlyList<string> Names, bool PlayerCountKnown);
 
 internal sealed record PanelMod(string RelativePath, bool Enabled, bool Protected);
@@ -33,9 +33,9 @@ internal sealed class PanelBackend(string configPath, string? supervisorPath = n
             }
             catch (IOException ex)
             {
-                return new(true, "attention", ex.Message, "", 0, config.Lobby.MaxPlayers, [], false);
+                return new(config.Lobby.Name, true, "attention", ex.Message, "", 0, config.Lobby.MaxPlayers, [], false);
             }
-            return new(false, "stopped", detail, "", 0, config.Lobby.MaxPlayers, [], false);
+            return new(config.Lobby.Name, false, "stopped", detail, "", 0, config.Lobby.MaxPlayers, [], false);
         }
 
         var game = !string.IsNullOrWhiteSpace(status.RunDirectory) && SafeFiles.Inside(status.RunDirectory, Path.Combine(config.DataDirectory, "runs"))
@@ -54,7 +54,8 @@ internal sealed class PanelBackend(string configPath, string? supervisorPath = n
             game = null;
         var names = game?.Roster?.Select(p => string.IsNullOrWhiteSpace(p.DisplayName)
             ? $"Player #{p.ConnectionId}" : p.DisplayName).ToArray() ?? [];
-        return new(true, state, detailText, game?.LobbyCode ?? "", game?.Players ?? 0, game?.MaxPlayers ?? config.Lobby.MaxPlayers, names, game is not null);
+        return new(config.Lobby.Name, true, state, detailText, game?.LobbyCode ?? "", game?.Players ?? 0,
+            game?.MaxPlayers ?? config.Lobby.MaxPlayers, names, game is not null);
     }
 
     private static bool IsAlive(SupervisorStatus status)

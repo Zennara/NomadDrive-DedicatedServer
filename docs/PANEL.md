@@ -2,6 +2,8 @@
 
 Open `NomadDrive.Panel.exe` in the same folder as `NomadDrive.Server.exe`, or launch it with `NomadDrive.Server.exe panel`. The build stages both in `artifacts/cli`. Install the x64 .NET 9 Desktop Runtime when running the framework-dependent panel on another PC.
 
+Run `scripts/install-panel.ps1 -SourceDirectory artifacts/cli` to install for the current Windows user and create a **Nomad Drive Server Panel** shortcut in the Start menu. Open that shortcut to use the installed copy with existing profiles.
+
 **Open config** selects a local server's startup JSON. **New config** creates one. For a new host, prepare an isolated game runtime using the installation guide, then set the game and data directory in Settings. Use separate directories for each running profile. On first launch the panel looks for `server.json` beside the panel executable or one directory above it. Forgetting a profile removes its automatic startup selection and preserves its server files.
 
 | View | Operations |
@@ -11,6 +13,6 @@ Open `NomadDrive.Panel.exe` in the same folder as `NomadDrive.Server.exe`, or la
 | Settings | Edit startup settings, import a copied save into an unused profile data directory, and set sign-in preferences. World generation settings apply when a new world is created. |
 | Logs | Read the most recent supervisor, game or BepInEx log output for the selected profile. |
 
-Close the window to hide the panel in the system tray. Double-click the icon or run the panel again to reopen the same window. **Quit panel** exits the application and leaves each supervisor running. Use **Stop** when you want to save and shut down a world.
+Close the window to hide the panel in the system tray. Double-click the icon or run the panel again to reopen the same window. **Quit panel** saves and stops all running servers registered in the panel before exiting. If any stop fails, the panel stays open and reports which profiles need attention. Use **Stop** to shut down only the selected server.
 
-Windows sign-in choices are off initially. Enable **Open panel in the tray at sign-in** for the current user, and **Start this server at Windows sign-in** for each desired profile. With only server startup selected, the panel launches those profiles and exits after handing them to the supervisors. Opening the panel normally leaves server startup under manual control. Windows must reach that user's sign-in for these settings to take effect.
+Windows sign-in choices are off initially. Enable **Open panel in the tray at sign-in** for the current user, and **Start this server at Windows sign-in** for each desired profile. The panel stays in the tray when it starts a server at sign-in. Opening the panel normally leaves server startup under manual control. Windows must reach that user's sign-in for these settings to take effect.

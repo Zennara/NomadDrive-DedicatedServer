@@ -31,8 +31,8 @@ repository does not contain or redistribute the game.
 
 Open **NomadDrive.Panel.exe** beside the supervisor, or run `NomadDrive.Server.exe panel`.
 Use **Open config** to attach to an existing local server. Closing the window hides
-it in the system tray. Double-click the tray icon to reopen it. **Quit panel** leaves
-hosted worlds running. See [Windows panel operations](docs/PANEL.md).
+it in the system tray. Double-click the tray icon to reopen it. **Quit panel** saves
+and stops the servers registered in the panel. See [Windows panel operations](docs/PANEL.md).
 
 - Startup JSON for lobby name, visibility, password, human player limit, world
   name, seed, difficulty, and all five resource density controls.

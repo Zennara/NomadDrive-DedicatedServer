@@ -112,3 +112,39 @@ stamp.SupervisorStartedUtc = DateTime.UnixEpoch;
 SafeFiles.AtomicJson(Path.Combine(config.DataDirectory, "supervisor.json"), stamp);
 status = await backend.StatusAsync();
 Check(!status.Running && status.Names.Count == 0 && status.LobbyCode == "", "stale supervisor never presents past players as online");
+await backend.StopIfRunningAsync();
+
+stamp.SupervisorStartedUtc = Process.GetCurrentProcess().StartTime.ToUniversalTime();
+SafeFiles.AtomicJson(Path.Combine(config.DataDirectory, "supervisor.json"), stamp);
+async Task RespondToStopAsync(bool success)
+{
+    var deadline = Stopwatch.StartNew();
+    while (deadline.Elapsed < TimeSpan.FromSeconds(10))
+    {
+        foreach (var file in Directory.GetFiles(Path.Combine(control, "requests"), "*.json"))
+        {
+            var pending = Protocol.Read<CommandRequest>(file);
+            if (pending?.Command != "stop") continue;
+            var response = Path.Combine(control, "responses", pending.Id + ".json");
+            if (File.Exists(response)) continue;
+            SafeFiles.AtomicJson(response,
+                new CommandResponse { Id = pending.Id, Ok = success, Error = "Test save failed" });
+            if (success)
+            {
+                await Task.Delay(300);
+                stamp.SupervisorStartedUtc = DateTime.UnixEpoch;
+                SafeFiles.AtomicJson(Path.Combine(config.DataDirectory, "supervisor.json"), stamp);
+            }
+            return;
+        }
+        await Task.Delay(40);
+    }
+    throw new TimeoutException("No stop request received.");
+}
+var refusal = RespondToStopAsync(false);
+try { await backend.StopIfRunningAsync(); throw new Exception("Stop failure was ignored."); }
+catch (IOException e) when (e.Message == "Test save failed") { }
+await refusal;
+Check((await backend.StatusAsync()).Running, "failed save preserves the running server and surfaces the error");
+await Task.WhenAll(RespondToStopAsync(true), backend.StopIfRunningAsync());
+Check(!(await backend.StatusAsync()).Running, "quit waits for the supervisor to finish stopping");

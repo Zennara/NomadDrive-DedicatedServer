@@ -36,21 +36,24 @@ internal static class Program
 
 internal sealed class PanelContext : ApplicationContext
 {
+    private readonly PanelProfiles profiles;
     private readonly PanelWindow window;
     private readonly NotifyIcon tray;
     private readonly System.Windows.Forms.Timer activation = new() { Interval = 300 };
     private readonly ContextMenuStrip menu = new();
     private bool quitting;
+    private bool stoppingProfiles;
     private bool startingProfiles;
     internal string TrayTooltip => tray.Text;
 
     internal PanelContext(PanelProfiles profiles, EventWaitHandle signal, EventWaitHandle signIn, bool startup)
     {
+        this.profiles = profiles;
         window = new PanelWindow(profiles);
         tray = new NotifyIcon { Text = window.TrayTitle, Icon = SystemIcons.Application, ContextMenuStrip = menu, Visible = true };
         window.TextChanged += (_, _) => tray.Text = window.TrayTitle;
         menu.Items.Add("Open server panel", null, (_, _) => Open());
-        menu.Items.Add("Quit panel", null, (_, _) => Quit());
+        menu.Items.Add("Quit panel", null, async (_, _) => await QuitAsync());
         tray.DoubleClick += (_, _) => Open();
         window.FormClosing += (_, e) =>
         {
@@ -84,7 +87,7 @@ internal sealed class PanelContext : ApplicationContext
 
     private async Task StartProfiles(PanelProfiles profiles, bool exitWhenHidden)
     {
-        if (startingProfiles || quitting) return;
+        if (startingProfiles || stoppingProfiles || quitting) return;
         startingProfiles = true;
         var errors = new List<string>();
         try
@@ -102,14 +105,40 @@ internal sealed class PanelContext : ApplicationContext
             Open();
             MessageBox.Show(window, string.Join(Environment.NewLine, errors), "Server startup");
         }
-        else if (exitWhenHidden && !profiles.StartPanelAtSignIn && !window.Visible) Quit();
+        else if (exitWhenHidden && !profiles.StartPanelAtSignIn && !profiles.Profiles.Any(p => p.AutoStart) && !window.Visible)
+            ExitThread();
     }
 
-    private void Quit()
+    private async Task QuitAsync()
     {
+        if (stoppingProfiles || quitting) return;
         if (window.OperationPending || startingProfiles)
         {
             MessageBox.Show(window, "A server operation is still in progress. You can close the window to the tray while it finishes.", "Server panel");
+            return;
+        }
+        stoppingProfiles = true;
+        window.Enabled = false;
+        tray.ShowBalloonTip(3000, "Nomad Drive", "Saving and stopping running server profiles…", ToolTipIcon.Info);
+        var errors = new List<string>();
+        try
+        {
+            foreach (var profile in profiles.Profiles)
+            {
+                try { await new PanelBackend(profile.ConfigPath).StopIfRunningAsync(); }
+                catch (Exception e) { errors.Add(profile.Name + ": " + e.Message); }
+            }
+        }
+        finally
+        {
+            window.Enabled = true;
+            stoppingProfiles = false;
+        }
+        if (errors.Count > 0)
+        {
+            Open();
+            MessageBox.Show(window, string.Join(Environment.NewLine, errors), "Could not stop all servers",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         quitting = true;

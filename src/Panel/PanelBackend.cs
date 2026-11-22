@@ -20,6 +20,26 @@ internal sealed class PanelBackend(string configPath, string? supervisorPath = n
 
     public Task<PanelStatus> StatusAsync() => Task.Run(() => ReadStatus(ServerConfig.Load(configFile)));
 
+    public async Task StopIfRunningAsync()
+    {
+        if (!(await StatusAsync().ConfigureAwait(false)).Running) return;
+        try { await CommandAsync("stop").ConfigureAwait(false); }
+        catch (IOException)
+        {
+            // A second profile can point at the same supervisor, or it can stop
+            // independently between the status check and the command.
+            if (!(await StatusAsync().ConfigureAwait(false)).Running) return;
+            throw;
+        }
+        var deadline = Stopwatch.StartNew();
+        while ((await StatusAsync().ConfigureAwait(false)).Running)
+        {
+            if (deadline.Elapsed >= TimeSpan.FromSeconds(10))
+                throw new IOException("The supervisor acknowledged shutdown but is still running.");
+            await Task.Delay(200).ConfigureAwait(false);
+        }
+    }
+
     private static PanelStatus ReadStatus(ServerConfig config)
     {
         var status = Protocol.Read<SupervisorStatus>(Path.Combine(config.DataDirectory, "supervisor.json"));

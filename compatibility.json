@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "serverVersion": "0.3.6.10",
+  "serverVersion": "0.4.0.11",
   "releaseChannel": "preview",
   "game": {
     "name": "Nomad Drive",
@@ -16,7 +16,7 @@
     "version": "5.4.23.6"
   },
   "validation": {
-    "verifiedOn": "2026-11-18",
+    "verifiedOn": "2026-11-21",
     "details": "docs/VALIDATION.md",
     "remaining": [
       "Live spawn-reference handover, returning players, and simultaneous joins",

@@ -4,6 +4,14 @@ namespace NomadDrive.Panel;
 
 internal static class Program
 {
+    internal static Icon PanelIcon { get; } = LoadIcon();
+    internal static Bitmap PanelLogo { get; } = new Icon(PanelIcon, 32, 32).ToBitmap();
+
+    private static Icon LoadIcon()
+    {
+        using var stream = typeof(Program).Assembly.GetManifestResourceStream("NomadDrive.Panel.Icon")!;
+        return new Icon(stream);
+    }
     [STAThread]
     private static void Main(string[] args)
     {
@@ -50,7 +58,7 @@ internal sealed class PanelContext : ApplicationContext
     {
         this.profiles = profiles;
         window = new PanelWindow(profiles);
-        tray = new NotifyIcon { Text = window.TrayTitle, Icon = SystemIcons.Application, ContextMenuStrip = menu, Visible = true };
+        tray = new NotifyIcon { Text = window.TrayTitle, Icon = Program.PanelIcon, ContextMenuStrip = menu, Visible = true };
         window.TextChanged += (_, _) => tray.Text = window.TrayTitle;
         menu.Items.Add("Open server panel", null, (_, _) => Open());
         menu.Items.Add("Quit panel", null, async (_, _) => await QuitAsync());

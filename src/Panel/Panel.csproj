@@ -6,8 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>NomadDrive.Panel</AssemblyName>
+    <ApplicationIcon>Assets/nomad-drive-panel.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../Supervisor/Supervisor.csproj" /></ItemGroup>
   <ItemGroup><InternalsVisibleTo Include="PanelWindow.Tests" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="Assets/nomad-drive-panel.ico" LogicalName="NomadDrive.Panel.Icon" /></ItemGroup>
 </Project>

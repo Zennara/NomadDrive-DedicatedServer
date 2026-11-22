@@ -412,10 +412,24 @@ public sealed class Plugin : BaseUnityPlugin
         {
             var offline = networkStopped && !NetworkServer.active && !NetworkClient.active &&
                 !busy && !closing && !pluginCheckpoint && SaveDisk != null && !SaveDisk.IsSaving;
+            var roster = NetworkServer.connections.Values
+                .Where(c => c != null && !(c is LocalConnectionToClient) && c.identity != null)
+                .Select(c =>
+                {
+                    var player = c.identity.GetComponent<Player>();
+                    var id = player == null ? null : player.EosProductUserId;
+                    var name = player == null ? null : player.DisplayName;
+                    // EOS may have a cached member name before the avatar receives its real name.
+                    if (IsDefaultName(name) && lobby != null && !string.IsNullOrEmpty(id) &&
+                        lobby.Members.TryGetValue(id, out var cached) && cached != id && !IsDefaultName(cached))
+                        name = TextChatSanitizer.Clean(cached, 32);
+                    return new { connectionId = c.connectionId, playerId = string.IsNullOrEmpty(id) ? null : id,
+                        displayName = string.IsNullOrWhiteSpace(name) ? $"Connection {c.connectionId}" : name };
+                }).ToArray();
             AtomicJson(Path.Combine(RunRoot, "status.json"), new {
                 state = failed ? "error" : ready ? "ready" : "starting", detail,
                 terminalNetworkStop = offline,
-                slotId = Saves?.ActiveSlotId, players = NetworkServer.connections.Values.Count(c => !(c is LocalConnectionToClient) && c.identity != null),
+                slotId = Saves?.ActiveSlotId, players = roster.Length, roster,
                 maxPlayers = HumanLimit, lobbyCode = lobby == null ? null : ((IEOSLobbyManager)lobby).JoinCode, updatedUtc = DateTime.UtcNow.ToString("O")
             });
             terminalStatusPublished = offline;
@@ -427,6 +441,11 @@ public sealed class Plugin : BaseUnityPlugin
             Logger.LogWarning("Status publication deferred: " + ex.Message);
         }
     }
+
+    private static bool IsDefaultName(string name) =>
+        string.IsNullOrWhiteSpace(name) || name == "Player" ||
+        (name.Length == 9 && name.StartsWith("Player ", StringComparison.Ordinal) &&
+         name[7] >= 'A' && name[7] <= 'Z' && name[8] >= '0' && name[8] <= '9');
 
     private void Fail(Exception ex)
     {

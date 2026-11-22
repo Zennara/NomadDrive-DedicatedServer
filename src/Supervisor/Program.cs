@@ -11,6 +11,15 @@ public static class Program
         try
         {
             var command = args[0];
+            if (command == "panel")
+            {
+                if (args.Length != 1) throw new ArgumentException("Open profiles from the panel window.");
+                if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("The panel requires Windows.");
+                var panel = Path.Combine(AppContext.BaseDirectory, "NomadDrive.Panel.exe");
+                if (!File.Exists(panel)) throw new FileNotFoundException("Install the bundled NomadDrive.Panel.exe next to the supervisor.");
+                using var process = Process.Start(new ProcessStartInfo(panel) { UseShellExecute = true });
+                return 0;
+            }
             ValidateOptions(args, command);
             var path = Path.GetFullPath(Option(args, "--config") ?? "server.json");
             if (command == "init")
@@ -122,6 +131,7 @@ public static class Program
 
     private static void Help() => Console.WriteLine("""
         Nomad Drive dedicated server supervisor (Windows)
+        panel                                             Open the Windows server panel
         init      [--config server.json]                  Create an example startup config
         validate  [--config server.json]                  Validate config and selected save
         run       [--config server.json]                  Host until a graceful stop

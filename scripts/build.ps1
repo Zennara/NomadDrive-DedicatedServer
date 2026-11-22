@@ -26,6 +26,8 @@ Assert-NoReparseAncestors $cli
 if (Test-Path -LiteralPath $cli) { $null = @(Get-SafeFiles $cli) }
 & dotnet publish (Join-Path $repo 'src/Supervisor/Supervisor.csproj') '-c' $Configuration '-r' 'win-x64' '--self-contained' 'false' '-o' $cli '--nologo'
 if ($LASTEXITCODE -ne 0) { throw 'Supervisor publish failed.' }
+& dotnet publish (Join-Path $repo 'src/Panel/Panel.csproj') '-c' $Configuration '-r' 'win-x64' '--self-contained' 'false' '-o' $cli '--nologo'
+if ($LASTEXITCODE -ne 0) { throw 'Windows panel publish failed.' }
 $pluginDestination = Join-Path $RuntimeDirectory 'BepInEx/plugins/DedicatedServer'
 Assert-NoReparseAncestors $pluginDestination
 [void][IO.Directory]::CreateDirectory($pluginDestination)

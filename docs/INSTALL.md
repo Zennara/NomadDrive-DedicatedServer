@@ -2,7 +2,7 @@
 
 This tool runs an isolated copy of the full game with a BepInEx hosting plugin. It does not include the game, game assets, credentials, or Unity libraries. You need your own legitimate Nomad Drive installation. Nothing is published to GitHub or installed into your normal game by these scripts.
 
-Management is command-line only, and the game runs in a hidden batch process. A working graphics context is required: the game's paint and restoration systems use GPU operations on the server. `-nographics` is not supported, and `headless: true` is rejected. This is an unattended host, not a graphics-free dedicated-server executable.
+Use the [Windows panel](PANEL.md) or the command line to manage the hidden game process. A working graphics context is required because the game's paint and restoration systems use GPU operations on the server. The supervisor rejects `headless: true`.
 
 The adapter currently accepts Steam build **26391437**, Unity **6000.0.73f1**, with this `Assembly-CSharp.dll` SHA-256:
 

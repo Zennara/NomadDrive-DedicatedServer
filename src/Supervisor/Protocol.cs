@@ -18,6 +18,13 @@ public sealed class CommandResponse
     public string SnapshotPath { get; set; } = "";
     public string Message { get; set; } = "";
 }
+public sealed class PlayerRosterEntry
+{
+    public int ConnectionId { get; set; }
+    public string DisplayName { get; set; } = "";
+    public string? PlayerId { get; set; }
+}
+
 public sealed class PluginStatus
 {
     public bool TerminalNetworkStop { get; set; }
@@ -25,6 +32,8 @@ public sealed class PluginStatus
     public string Detail { get; set; } = "";
     public string SlotId { get; set; } = "";
     public int Players { get; set; }
+    // Older host plugins reported only the numeric player count.
+    public PlayerRosterEntry[]? Roster { get; set; }
     public int MaxPlayers { get; set; }
     public string LobbyCode { get; set; } = "";
     public DateTimeOffset UpdatedUtc { get; set; }

@@ -1,6 +1,6 @@
 # NomadDrive-DedicatedServer
 
-Windows command-line supervisor and BepInEx 5 hosting plugin for Nomad Drive.
+Windows desktop control panel, command-line supervisor and BepInEx 5 hosting plugin for Nomad Drive.
 Runs an isolated copy of the full game with an unattended host and no local
 player character. This is not an official dedicated-server executable.
 
@@ -8,7 +8,7 @@ A working Windows graphics device is required. The process runs in the backgroun
 with a graphics context because the game's paint and restoration saves depend on
 GPU texture readback. No-graphics mode is rejected to prevent losing those changes.
 
-**Preview 0.3.2.6.** Supports descriptive lobby names up to 64 characters, coordinated plugin saves and shutdown preparation for automatic vehicle parking. Compilation and supervisor tests do not establish
+The Windows preview supports descriptive lobby names up to 64 characters, coordinated plugin saves and shutdown preparation for automatic vehicle parking. Compilation and supervisor tests do not establish
 vanilla-client compatibility. See [validation](docs/VALIDATION.md) for the actual
 runtime results and remaining checks before using a valuable world.
 
@@ -28,6 +28,11 @@ The setup scripts copy your installed game to a new runtime directory; the
 repository does not contain or redistribute the game.
 
 ## Features
+
+Open **NomadDrive.Panel.exe** beside the supervisor, or run `NomadDrive.Server.exe panel`.
+Use **Open config** to attach to an existing local server. Closing the window hides
+it in the system tray. Double-click the tray icon to reopen it. **Quit panel** leaves
+hosted worlds running. See [Windows panel operations](docs/PANEL.md).
 
 - Startup JSON for lobby name, visibility, password, human player limit, world
   name, seed, difficulty, and all five resource density controls.

@@ -347,3 +347,8 @@ The supervisor kept the original process alive through two sharing violations an
 recovered after the handle closed. The 45 supervisor checks passed, including refusal
 of wrong-slot, truncated, and same-size corrupt checkpoint data. These runs used zero
 remote players. See `tests/RuntimeHealthProbe/README.md` for the native test procedure.
+## Windows control panel
+
+The local Windows candidate was tested against Nomad Drive 1.0.1, Steam build 26391437. A private native host passed 17 operations checks, including start, attachment without a duplicate process, an acknowledged announcement, save, a CRC-verified backup, restart into the same slot and graceful stop. A synthetic authenticated remote connection exercised name resolution, Unicode display, local-host exclusion and removal on disconnect.
+
+The desktop fixtures exercised window close and reactivation, settings sections, masked passwords, validated config writes, stale status, plugin package installation and toggling, profile persistence and sign-in registration using a disposable registry key. Manual Windows sign-in after reboot and a real remote player's on-screen announcement remain unverified.

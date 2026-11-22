@@ -73,14 +73,14 @@ internal sealed class PanelWindow : Form
         autoStart.Click += (_, _) => ChangeStartup(true);
         autoPanel.Click += (_, _) => ChangeStartup(false);
         mods.SelectedIndexChanged += (_, _) => EnableActions();
-        timer.Tick += async (_, _) => { if (Visible) await RefreshAsync(); };
+        timer.Tick += async (_, _) => await RefreshAsync();
         tabs.SelectedIndexChanged += async (_, _) => await RefreshAsync();
         logKind.SelectedIndexChanged += async (_, _) => await RefreshAsync();
         VisibleChanged += async (_, _) =>
         {
             if (Visible) await RefreshAsync();
         };
-        Shown += (_, _) => timer.Start();
+        timer.Start();
         var nearby = PanelProfiles.DefaultConfigPath;
         if (profiles.IsFirstRun && nearby != null) profiles.Add(Path.GetFileName(Path.GetDirectoryName(nearby)) ?? "Server", nearby);
         Bind(null);
@@ -130,16 +130,30 @@ internal sealed class PanelWindow : Form
         autoStart.Checked = Selected?.AutoStart == true; autoPanel.Checked = profiles.StartPanelAtSignIn;
         EnableActions(); _ = RefreshAsync();
     }
+    internal string TrayTitle { get; private set; } = "Nomad Drive server panel";
+
     private void UpdateTitle()
     {
         var name = snapshot?.ServerName ?? Selected?.Name;
-        Text = snapshot switch
+        var suffix = snapshot switch
         {
-            { PlayerCountKnown: true } live => $"{name} ({live.Players}/{live.MaxPlayers})",
-            { Running: false } stopped => $"{name} (0/{stopped.MaxPlayers}, stopped)",
-            { } pending => $"{name} (?/{pending.MaxPlayers})",
-            _ => name ?? "Nomad Drive | Server panel"
+            { PlayerCountKnown: true } live => $" ({live.Players}/{live.MaxPlayers})",
+            { Running: false } stopped => $" (0/{stopped.MaxPlayers}, stopped)",
+            { } pending => $" (?/{pending.MaxPlayers})",
+            _ => ""
         };
+        var trayName = name ?? "Nomad Drive server panel";
+        // Keep the count visible even when the server name exceeds the tooltip budget.
+        const int tooltipLimit = 63;
+        var nameBudget = tooltipLimit - suffix.Length;
+        if (trayName.Length > nameBudget)
+        {
+            var cut = nameBudget - 1;
+            if (char.IsHighSurrogate(trayName[cut - 1])) cut--;
+            trayName = trayName[..cut] + "…";
+        }
+        TrayTitle = trayName + suffix;
+        Text = (name ?? "Nomad Drive | Server panel") + suffix;
     }
 
     private async Task RefreshAsync()
@@ -153,6 +167,7 @@ internal sealed class PanelWindow : Form
             if (backend != current || IsDisposed) return;
             snapshot = state;
             UpdateTitle();
+            if (!Visible) return;
             status.Text = $"{state.State.ToUpperInvariant()}    {state.Detail}" +
                 (state.PlayerCountKnown ? $"    Players {state.Players}/{state.MaxPlayers}    Lobby {state.LobbyCode}"
                     : state.Running ? "    Player count unavailable" : "");

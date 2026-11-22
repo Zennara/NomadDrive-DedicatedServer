@@ -42,11 +42,13 @@ internal sealed class PanelContext : ApplicationContext
     private readonly ContextMenuStrip menu = new();
     private bool quitting;
     private bool startingProfiles;
+    internal string TrayTooltip => tray.Text;
 
     internal PanelContext(PanelProfiles profiles, EventWaitHandle signal, EventWaitHandle signIn, bool startup)
     {
         window = new PanelWindow(profiles);
-        tray = new NotifyIcon { Text = "Nomad Drive server panel", Icon = SystemIcons.Application, ContextMenuStrip = menu, Visible = true };
+        tray = new NotifyIcon { Text = window.TrayTitle, Icon = SystemIcons.Application, ContextMenuStrip = menu, Visible = true };
+        window.TextChanged += (_, _) => tray.Text = window.TrayTitle;
         menu.Items.Add("Open server panel", null, (_, _) => Open());
         menu.Items.Add("Quit panel", null, (_, _) => Quit());
         tray.DoubleClick += (_, _) => Open();

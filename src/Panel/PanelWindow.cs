@@ -28,6 +28,7 @@ internal sealed class PanelWindow : Form
     internal PanelWindow(PanelProfiles profiles)
     {
         this.profiles = profiles;
+        Icon = Program.PanelIcon;
         Size = new(940, 620); MinimumSize = new(780, 510);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 10);
@@ -40,18 +41,19 @@ internal sealed class PanelWindow : Form
                 e.Value = profiles.Profiles.Count(other => other.Name.Equals(p.Name,StringComparison.OrdinalIgnoreCase)) > 1
                     ? $"{p.Name} ({p.ConfigPath})" : p.Name;
         };
-        header.Controls.Add(new Label { Text = "Server profile", AutoSize = true, Padding = new(0, 7, 6, 0) });
+        header.Controls.Add(new PictureBox { Image = Program.PanelLogo, Size = new(32, 32), SizeMode = PictureBoxSizeMode.Zoom });
+        header.Controls.Add(new Label { Text = "Server profile", ForeColor = Color.White, AutoSize = true, Padding = new(0, 7, 6, 0) });
         header.Controls.Add(selector);
         Add(header, "Open config", () => PickProfile(false));
         Add(header, "New config", () => PickProfile(true));
         Add(header, "Forget profile", Forget);
         header.Padding = new(12,9,12,9);
         header.BackColor = Color.FromArgb(35,52,65);
-        header.Controls[0].ForeColor = Color.White;
         var server = Page("Server");
         var controls = Row();
         foreach (var label in new[] { "Start", "Save", "Backup", "Restart", "Stop" })
             Add(controls, label, () => Command(label));
+        Add(controls, "Edit config", Edit);
         var chat = Row(); chat.Controls.Add(announcement); Add(chat, "Announce", () => Command("Announce"));
         var online = new GroupBox { Text = "Online players", Dock = DockStyle.Fill, Padding = new(10) };
         online.Controls.Add(roster);
@@ -223,7 +225,7 @@ internal sealed class PanelWindow : Form
             {
                 "Open config" or "New config" => true,
                 "Start" or "Install mod" or "Import saved world" => stopped,
-                "Edit server settings" => backend != null && snapshot?.Running != true,
+                "Edit config" or "Edit server settings" => backend != null,
                 "Enable" => stopped && mod is { Enabled: false, Protected: false },
                 "Disable" => stopped && mod is { Enabled: true, Protected: false },
                 "Forget profile" or "Refresh logs" => backend != null,
@@ -290,7 +292,8 @@ internal sealed class PanelWindow : Form
     {
         if (Selected is not { } p) return Task.CompletedTask;
         using var editor = new SettingsWindow(p.ConfigPath);
-        if (editor.ShowDialog(this) == DialogResult.OK) Report("Server settings saved.");
+        if (editor.ShowDialog(this) == DialogResult.OK)
+            Report("Config saved. To apply startup settings, stop the server and start it again.");
         return Task.CompletedTask;
     }
     private async Task ImportWorld()

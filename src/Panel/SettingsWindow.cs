@@ -25,6 +25,7 @@ internal sealed class SettingsWindow : Form
         config = JsonSerializer.Deserialize<ServerConfig>(reader.ReadToEnd(), ServerConfig.Json)
             ?? throw new InvalidDataException("Empty configuration.");
         Text = "Server settings"; Size = new(760, 550); MinimumSize = new(620, 430);
+        Icon = Program.PanelIcon;
         StartPosition = FormStartPosition.CenterParent;
         Section("Server",config);
         Section("Lobby",config.Lobby); Section("World",config.World);
@@ -32,7 +33,9 @@ internal sealed class SettingsWindow : Form
         var footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Padding = new(8) };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
         footer.Controls.Add(cancel); footer.Controls.Add(save);
-        Controls.Add(pages); Controls.Add(footer); CancelButton = cancel;
+        var notice = new Label { Text = "Changes apply on the next full stop and start. Stop the server before changing directories.",
+            Dock = DockStyle.Top, AutoSize = true, Padding = new(10) };
+        Controls.Add(pages); Controls.Add(footer); Controls.Add(notice); CancelButton = cancel;
         save.Click += (_, _) =>
         {
             save.Enabled = false;
@@ -60,15 +63,24 @@ internal sealed class SettingsWindow : Form
             using var originalStream = new MemoryStream(original);
             using var originalReader = new StreamReader(originalStream,Encoding.UTF8,true);
             var prior = JsonSerializer.Deserialize<ServerConfig>(originalReader.ReadToEnd(),ServerConfig.Json)!;
-            // Guard both old and new locations even when the old config contains
-            // an invalid lobby value. Only existing locations can have a live host.
-            foreach (var root in new[] { prior.DataDirectory, prior.GameDirectory, validated.DataDirectory, validated.GameDirectory }
-                .Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => Path.GetFullPath(p,Path.GetDirectoryName(path)!))
-                .Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
+            var parent = Path.GetDirectoryName(Path.GetFullPath(path))!;
+            string ResolvePrior(string value) => string.IsNullOrWhiteSpace(value) ? "" :
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(value, parent));
+            var previousData = ResolvePrior(prior.DataDirectory);
+            var previousGame = ResolvePrior(prior.GameDirectory);
+            var changingDirectories = !StringComparer.OrdinalIgnoreCase.Equals(previousData, Path.TrimEndingDirectorySeparator(validated.DataDirectory)) ||
+                !StringComparer.OrdinalIgnoreCase.Equals(previousGame, Path.TrimEndingDirectorySeparator(validated.GameDirectory));
+            // A running supervisor has its startup settings in memory, but changing
+            // its paths could detach the panel from the process it still manages.
+            if (changingDirectories)
             {
-                SafeFiles.RejectReparseAncestors(Path.Combine(root,"server.lock"));
-                locks.Push(SafeFiles.AcquireLock(root));
-                RuntimeGuard.RejectLiveGame(root);
+                foreach (var root in new[] { previousData, previousGame, validated.DataDirectory, validated.GameDirectory }
+                    .Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
+                {
+                    SafeFiles.RejectReparseAncestors(Path.Combine(root,"server.lock"));
+                    locks.Push(SafeFiles.AcquireLock(root));
+                    RuntimeGuard.RejectLiveGame(root);
+                }
             }
             if (!original.SequenceEqual(File.ReadAllBytes(path)))
                 throw new IOException("The config changed on disk. Reopen settings before saving.");

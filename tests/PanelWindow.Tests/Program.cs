@@ -41,6 +41,8 @@ internal static class Program
         var game = new PluginStatus { State = "ready", Players = 2, MaxPlayers = 15, UpdatedUtc = DateTimeOffset.UtcNow };
         SafeFiles.AtomicJson(heartbeat,game);
         Wait(() => form.Text == "Test lobby (2/15)");
+        Check(Find<Button>(form).Single(b => b.Text == "Edit config").Enabled, "Config editor is available while online");
+        Check(Find<PictureBox>(form).Any(p => p.Image != null), "Logo is displayed in the header");
         form.Close();
         game.Players = 3;
         SafeFiles.AtomicJson(heartbeat,game);
@@ -74,6 +76,15 @@ internal static class Program
         try { SettingsWindow.SaveConfig(path,current,config); throw new Exception("Invalid config was saved"); }
         catch(InvalidDataException) { }
         Check(current.SequenceEqual(File.ReadAllBytes(path)),"Invalid settings preserve prior config");
+        using var serverLock = SafeFiles.AcquireLock(resolved.DataDirectory);
+        config.Lobby.MaxPlayers = 8;
+        SettingsWindow.SaveConfig(path, current, config);
+        Check(ServerConfig.Load(path).Lobby.MaxPlayers == 8, "Active server lock permits ordinary config edits");
+        current = File.ReadAllBytes(path);
+        config.DataDirectory = "other-data";
+        try { SettingsWindow.SaveConfig(path, current, config); throw new Exception("Changed active data path."); }
+        catch (IOException) { }
+        Check(current.SequenceEqual(File.ReadAllBytes(path)), "Active server lock protects its directories");
     }
     static IEnumerable<T> Find<T>(Control control) where T:Control =>
         control.Controls.Cast<Control>().SelectMany(c => Find<T>(c).Prepend(c).OfType<T>());

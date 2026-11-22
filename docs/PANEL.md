@@ -15,6 +15,6 @@ Run `scripts/install-panel.ps1 -SourceDirectory artifacts/cli` to install for th
 
 **Edit config** on the Server view opens the startup settings, even while the server is online. Settings take effect after a full **Stop** and **Start**. Stop the server before changing its data or runtime directory.
 
-Close the window to hide the panel in the system tray. Double-click the icon or run the panel again to reopen the same window. **Quit panel** saves and stops all running servers registered in the panel before exiting. If any stop fails, the panel stays open and reports which profiles need attention. Use **Stop** to shut down only the selected server.
+Close the window to hide the panel in the system tray. Double-click the icon or run the panel again to reopen the same window. **Shut down all servers** saves and stops all running servers registered in the panel before exiting. If any stop fails, the panel stays open and reports which profiles need attention. Use **Stop** to shut down only the selected server.
 
 Windows sign-in choices are off initially. Enable **Open panel in the tray at sign-in** for the current user, and **Start this server at Windows sign-in** for each desired profile. The panel stays in the tray when it starts a server at sign-in. Opening the panel normally leaves server startup under manual control. Windows must reach that user's sign-in for these settings to take effect.

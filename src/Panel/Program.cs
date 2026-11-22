@@ -61,7 +61,7 @@ internal sealed class PanelContext : ApplicationContext
         tray = new NotifyIcon { Text = window.TrayTitle, Icon = Program.PanelIcon, ContextMenuStrip = menu, Visible = true };
         window.TextChanged += (_, _) => tray.Text = window.TrayTitle;
         menu.Items.Add("Open server panel", null, (_, _) => Open());
-        menu.Items.Add("Quit panel", null, async (_, _) => await QuitAsync());
+        menu.Items.Add("Shut down all servers", null, async (_, _) => await QuitAsync());
         tray.DoubleClick += (_, _) => Open();
         window.FormClosing += (_, e) =>
         {

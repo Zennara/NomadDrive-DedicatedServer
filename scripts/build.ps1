@@ -35,5 +35,14 @@ $plugin = Join-Path $repo ('src/HostPlugin/bin/' + $Configuration + '/netstandar
 $pluginTarget = Join-Path $pluginDestination 'NomadDrive.DedicatedServer.dll'
 Assert-NoReparseAncestors $pluginTarget
 Copy-Item -LiteralPath $plugin -Destination $pluginTarget -Force
+$setup = Join-Path $cli 'runtime-setup'
+Assert-NoReparseAncestors $setup
+[void][IO.Directory]::CreateDirectory($setup)
+foreach ($name in 'setup-runtime.ps1', 'runtime-common.ps1', 'unity-win32-6000.0.73f1.json') {
+    Assert-NoReparseAncestors (Join-Path $setup $name)
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $setup $name) -Force
+}
+Assert-NoReparseAncestors (Join-Path $setup 'NomadDrive.DedicatedServer.dll')
+Copy-Item -LiteralPath $plugin -Destination (Join-Path $setup 'NomadDrive.DedicatedServer.dll') -Force
 Write-Host "CLI staged at $cli"
 Write-Host "Hosting plugin staged at $pluginDestination"

@@ -9,22 +9,19 @@ namespace NomadDrive.Panel;
 internal sealed class SettingsWindow : Form
 {
     private readonly string path;
-    private readonly byte[] original;
+    private readonly byte[]? original;
     private readonly ServerConfig config;
     private readonly List<Action> apply = [];
     private readonly TabControl pages = new() { Dock = DockStyle.Fill };
     private readonly Button save = new() { Text = "Save settings", AutoSize = true };
 
-    internal SettingsWindow(string path)
+    internal SettingsWindow(string path, ServerConfig? initial = null)
     {
         this.path = path;
-        original = File.ReadAllBytes(path);
-        // Preserve relative paths when saving and let the supervisor resolve them.
-        using var input = new MemoryStream(original);
-        using var reader = new StreamReader(input, Encoding.UTF8, true);
-        config = JsonSerializer.Deserialize<ServerConfig>(reader.ReadToEnd(), ServerConfig.Json)
-            ?? throw new InvalidDataException("Empty configuration.");
+        if (initial == null) original = File.ReadAllBytes(path);
+        config = initial ?? ReadConfig(original!);
         Text = "Server settings"; Size = new(760, 550); MinimumSize = new(620, 430);
+        if (initial != null) { Text = "Configure new server"; save.Text = "Continue"; }
         Icon = Program.PanelIcon;
         StartPosition = FormStartPosition.CenterParent;
         Section("Server",config);
@@ -33,7 +30,9 @@ internal sealed class SettingsWindow : Form
         var footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Padding = new(8) };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
         footer.Controls.Add(cancel); footer.Controls.Add(save);
-        var notice = new Label { Text = "Changes apply on the next full stop and start. Stop the server before changing directories.",
+        var notice = new Label { Text = initial == null
+                ? "Changes apply on the next full stop and start. Stop the server before changing directories."
+                : "Choose the server settings. The new server will stay stopped.",
             Dock = DockStyle.Top, AutoSize = true, Padding = new(10) };
         Controls.Add(pages); Controls.Add(footer); Controls.Add(notice); CancelButton = cancel;
         save.Click += (_, _) =>
@@ -42,12 +41,23 @@ internal sealed class SettingsWindow : Form
             try
             {
                 foreach (var update in apply) update();
-                SaveConfig(path,original,config);
+                if (original != null) SaveConfig(path,original,config);
+                else config.Validate();
                 DialogResult = DialogResult.OK;
             }
             catch (Exception e) { MessageBox.Show(this,e.Message,"Settings",MessageBoxButtons.OK,MessageBoxIcon.Warning); }
             finally { if (!IsDisposed) save.Enabled = true; }
         };
+    }
+
+    internal ServerConfig Config => config;
+
+    private static ServerConfig ReadConfig(byte[] contents)
+    {
+        using var input = new MemoryStream(contents);
+        using var reader = new StreamReader(input, Encoding.UTF8, true);
+        return JsonSerializer.Deserialize<ServerConfig>(reader.ReadToEnd(), ServerConfig.Json)
+            ?? throw new InvalidDataException("Empty configuration.");
     }
 
     internal static void SaveConfig(string path, byte[] original, ServerConfig config)
@@ -60,9 +70,7 @@ internal sealed class SettingsWindow : Form
             using (var file = new FileStream(temp,FileMode.CreateNew,FileAccess.Write,FileShare.None))
                 JsonSerializer.Serialize(file,config,ServerConfig.Json);
             var validated = ServerConfig.Load(temp);
-            using var originalStream = new MemoryStream(original);
-            using var originalReader = new StreamReader(originalStream,Encoding.UTF8,true);
-            var prior = JsonSerializer.Deserialize<ServerConfig>(originalReader.ReadToEnd(),ServerConfig.Json)!;
+            var prior = ReadConfig(original);
             var parent = Path.GetDirectoryName(Path.GetFullPath(path))!;
             string ResolvePrior(string value) => string.IsNullOrWhiteSpace(value) ? "" :
                 Path.TrimEndingDirectorySeparator(Path.GetFullPath(value, parent));

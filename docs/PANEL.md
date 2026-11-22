@@ -4,7 +4,9 @@ Open `NomadDrive.Panel.exe` in the same folder as `NomadDrive.Server.exe`, or la
 
 Run `scripts/install-panel.ps1 -SourceDirectory artifacts/cli` to install for the current Windows user and create a **Nomad Drive Server Panel** shortcut in the Start menu. Open that shortcut to use the installed copy with existing profiles.
 
-**Open config** selects a local server's startup JSON. **New config** creates one. For a new host, prepare an isolated game runtime using the installation guide, then set the game and data directory in Settings. Use separate directories for each running profile. On first launch the panel looks for `server.json` beside the panel executable or one directory above it. Forgetting a profile removes its automatic startup selection and preserves its server files.
+**New server** lets you pick a config location and edit the settings before creating the server. Use a dedicated folder for each server. If its configured runtime is missing, select a clean, supported Nomad Drive installation. The panel runs the bundled runtime setup to make an isolated copy. The first setup downloads the pinned loader and Unity archive, which may take time and disk space. You can also enter the path to an already prepared runtime with the hosting plugin. The new server stays stopped so you can edit settings or install mods before you start it.
+
+**Open config** adds an existing local server. On first launch the panel looks for `server.json` beside the panel executable or one directory above it. Forgetting a profile removes its automatic startup selection and preserves its server files.
 
 | View | Operations |
 | --- | --- |
@@ -17,4 +19,4 @@ Run `scripts/install-panel.ps1 -SourceDirectory artifacts/cli` to install for th
 
 Close the window to hide the panel in the system tray. Double-click the icon or run the panel again to reopen the same window. **Shut down all servers** saves and stops all running servers registered in the panel before exiting. If any stop fails, the panel stays open and reports which profiles need attention. Use **Stop** to shut down only the selected server.
 
-Windows sign-in choices are off initially. Enable **Open panel in the tray at sign-in** for the current user, and **Start this server at Windows sign-in** for each desired profile. The panel stays in the tray when it starts a server at sign-in. Opening the panel normally leaves server startup under manual control. Windows must reach that user's sign-in for these settings to take effect.
+Windows sign-in choices are off initially. **Open panel in the tray at sign-in** is in the panel header and applies to the current Windows user. **Start this server at Windows sign-in** is on each server's Settings tab. The panel stays in the tray when it starts a server at sign-in. Opening the panel normally leaves server startup under manual control. Windows must reach that user's sign-in for these settings to take effect.

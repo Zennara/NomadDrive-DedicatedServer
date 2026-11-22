@@ -15,6 +15,9 @@ Assert-NoReparseAncestors $shortcutPath
 $files = foreach ($app in 'NomadDrive.Panel', 'NomadDrive.Server') {
     foreach ($extension in 'exe', 'dll', 'deps.json', 'runtimeconfig.json') { "$app.$extension" }
 }
+$files += foreach ($asset in 'setup-runtime.ps1', 'runtime-common.ps1', 'unity-win32-6000.0.73f1.json', 'NomadDrive.DedicatedServer.dll') {
+    "runtime-setup/$asset"
+}
 foreach ($file in $files) {
     $inputFile = Join-Path $source $file
     Assert-NoReparseAncestors $inputFile
@@ -27,7 +30,11 @@ if (Get-Process -Name 'NomadDrive.Panel' -ErrorAction SilentlyContinue) {
 }
 [void][IO.Directory]::CreateDirectory($destination)
 [void][IO.Directory]::CreateDirectory($programs)
-foreach ($file in $files) { Copy-Item -LiteralPath (Join-Path $source $file) -Destination (Join-Path $destination $file) -Force }
+foreach ($file in $files) {
+    $target = Join-Path $destination $file
+    [void][IO.Directory]::CreateDirectory((Split-Path -Parent $target))
+    Copy-Item -LiteralPath (Join-Path $source $file) -Destination $target -Force
+}
 $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
 $shortcut.TargetPath = Join-Path $destination 'NomadDrive.Panel.exe'
 $shortcut.WorkingDirectory = $destination

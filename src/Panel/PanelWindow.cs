@@ -44,11 +44,14 @@ internal sealed class PanelWindow : Form
         header.Controls.Add(new PictureBox { Image = Program.PanelLogo, Size = new(32, 32), SizeMode = PictureBoxSizeMode.Zoom });
         header.Controls.Add(new Label { Text = "Server profile", ForeColor = Color.White, AutoSize = true, Padding = new(0, 7, 6, 0) });
         header.Controls.Add(selector);
-        Add(header, "Open config", () => PickProfile(false));
-        Add(header, "New config", () => PickProfile(true));
+        Add(header, "New server", CreateServerAsync);
+        Add(header, "Open config", OpenProfile);
         Add(header, "Forget profile", Forget);
         header.Padding = new(12,9,12,9);
         header.BackColor = Color.FromArgb(35,52,65);
+        var panelOptions = Row();
+        panelOptions.Padding = new(12, 4, 12, 4);
+        panelOptions.Controls.Add(autoPanel);
         var server = Page("Server");
         var controls = Row();
         foreach (var label in new[] { "Start", "Save", "Backup", "Restart", "Stop" })
@@ -65,12 +68,12 @@ internal sealed class PanelWindow : Form
         var settings = Page("Settings"); var options = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
         Add(options, "Edit server settings", Edit);
         Add(options, "Import saved world", ImportWorld);
-        options.Controls.Add(autoStart); options.Controls.Add(autoPanel);
+        options.Controls.Add(autoStart);
         settings.Controls.Add(options);
         var logPage = Page("Logs"); var source = Row(); logKind.Items.AddRange(["Supervisor", "Game", "Plugins"]); logKind.SelectedIndex = 0;
         source.Controls.Add(logKind); Add(source, "Refresh logs", () => Task.CompletedTask);
         logPage.Controls.Add(logs); logPage.Controls.Add(source);
-        Controls.Add(tabs); Controls.Add(header); Controls.Add(feedback);
+        Controls.Add(tabs); Controls.Add(header); Controls.Add(panelOptions); Controls.Add(feedback);
         selector.SelectedIndexChanged += (_, _) => { if (!binding) SelectProfile(); };
         autoStart.Click += (_, _) => ChangeStartup(true);
         autoPanel.Click += (_, _) => ChangeStartup(false);
@@ -223,7 +226,7 @@ internal sealed class PanelWindow : Form
         foreach (var (key, b) in actions)
             b.Enabled = !OperationPending && (key switch
             {
-                "Open config" or "New config" => true,
+                "Open config" or "New server" => true,
                 "Start" or "Install mod" or "Import saved world" => stopped,
                 "Edit config" or "Edit server settings" => backend != null,
                 "Enable" => stopped && mod is { Enabled: false, Protected: false },
@@ -235,20 +238,49 @@ internal sealed class PanelWindow : Form
         autoStart.Enabled = !OperationPending && backend != null;
         autoPanel.Enabled = !OperationPending;
     }
-    private Task PickProfile(bool create)
+    private Task OpenProfile()
     {
-        using FileDialog dialog = create ? new SaveFileDialog { FileName = "server.json" } : new OpenFileDialog();
+        using var dialog = new OpenFileDialog();
         dialog.Filter = "Server configuration (*.json)|*.json";
         if (dialog.ShowDialog(this) != DialogResult.OK) return Task.CompletedTask;
         var path = Path.GetFullPath(dialog.FileName);
-        if (create)
-        {
-            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
-            System.Text.Json.JsonSerializer.Serialize(stream,new ServerConfig(),ServerConfig.Json);
-        }
         var cfg = ServerConfig.Load(path);
         if (!profiles.Profiles.Any(p => string.Equals(p.ConfigPath,path,StringComparison.OrdinalIgnoreCase))) profiles.Add(cfg.Lobby.Name,path);
         Bind(path); return Task.CompletedTask;
+    }
+
+    private async Task CreateServerAsync()
+    {
+        using var location = new SaveFileDialog
+        {
+            Title = "Choose where to save the new server config",
+            FileName = "server.json", Filter = "Server configuration (*.json)|*.json",
+            OverwritePrompt = false
+        };
+        if (location.ShowDialog(this) != DialogResult.OK) return;
+        var path = Path.GetFullPath(location.FileName);
+        if (File.Exists(path)) throw new IOException("Choose a new config filename, or use Open config.");
+
+        using var editor = new SettingsWindow(path, new ServerConfig());
+        if (editor.ShowDialog(this) != DialogResult.OK) return;
+        var config = editor.Config;
+        var (runtime, _) = NewServer.CheckPaths(path, config, profiles.Profiles);
+        if (!NewServer.HasRuntime(runtime))
+        {
+            using var source = new FolderBrowserDialog
+            {
+                Description = "Select your clean Nomad Drive installation to prepare an isolated server runtime",
+                UseDescriptionForTitle = true,
+                ShowNewFolderButton = false
+            };
+            if (source.ShowDialog(this) != DialogResult.OK) return;
+            feedback.Text = "Preparing the runtime. First-time setup may need to download the game loader and Unity libraries.";
+            await NewServer.PrepareRuntimeAsync(source.SelectedPath, runtime);
+        }
+        NewServer.CreateProfile(path, config, profiles);
+        Bind(path);
+        tabs.SelectedIndex = 0;
+        Report("Server created and stopped. You can edit settings or install mods before starting.");
     }
     private Task Forget()
     {

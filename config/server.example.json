@@ -13,6 +13,7 @@
     "name": "Server World",
     "seed": 0,
     "preset": "Normal",
+    "overrideLootDensities": false,
     "foodDensity": 100,
     "waterDensity": 100,
     "fuelDensity": 100,

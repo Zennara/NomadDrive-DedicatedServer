@@ -50,13 +50,16 @@ NomadDrive.Server run --config C:/Servers/Nomad/server.json
 | `world.name` | `Server World` | New world name, 1 to 24 characters. |
 | `world.seed` | `0` | New world seed, 0 to 999999. |
 | `world.preset` | `Normal` | `Cozy`, `Normal`, `Nomad`, or `Custom`. |
+| `world.overrideLootDensities` | `false` | Use all five configured densities as a custom economy on every full start, including continued and imported worlds. |
 | `world.foodDensity` | `100` | Custom food density, 25 to 200 in increments of 5. |
 | `world.waterDensity` | `100` | Custom water density, same range. |
 | `world.fuelDensity` | `100` | Custom fuel density, same range. |
 | `world.partsDensity` | `100` | Custom parts density, same range. |
 | `world.medicineDensity` | `100` | Custom medicine density, same range. |
 
-World settings apply when creating a world. Subsequent starts resume the slot recorded in `dataDirectory/world.json`. Importing a world preserves that world's settings. A missing selected slot is an error; the supervisor never silently replaces it with a new world. The game validates imported save format during startup.
+By default, world settings apply when creating a world. Subsequent starts resume the slot recorded in `dataDirectory/world.json`. Importing a world preserves that world's settings. A missing selected slot is an error; the supervisor never silently replaces it with a new world. The game validates imported save format during startup.
+
+To adjust an existing world, enable **Override Loot Densities** on the World tab or set `world.overrideLootDensities` to `true`. Set all five densities to the values you want, then stop and start the server. This replaces the preset economy for future generation and keeps the saved party size. Parts density also influences native vehicle discovery. The next successful world save records the new economy. Turning the option off resumes the last saved economy. Existing items are not rerolled by this setting.
 
 ## Player spawning
 

@@ -149,9 +149,18 @@ public sealed class Plugin : BaseUnityPlugin
         if (lobby == null) throw new Exception("EOS lobby service unavailable");
         var w = Settings["world"];
         var preset = (WorldDifficultyPreset)Enum.Parse(typeof(WorldDifficultyPreset), (string)w["preset"]);
+        var overrideDensities = (bool?)w["overrideLootDensities"] == true;
+        var partySize = overrideDensities && Saves.IsLoadedWorld ? Saves.LoadedEconomySettings.PartySize : Math.Min(8, HumanLimit);
+        if (overrideDensities) preset = WorldDifficultyPreset.Custom;
         var economy = preset == WorldDifficultyPreset.Custom
-            ? WorldEconomySettings.Create(preset, (byte)w["foodDensity"], (byte)w["waterDensity"], (byte)w["fuelDensity"], (byte)w["partsDensity"], (byte)w["medicineDensity"], (byte)Math.Min(8, HumanLimit))
+            ? WorldEconomySettings.Create(preset, (byte)w["foodDensity"], (byte)w["waterDensity"], (byte)w["fuelDensity"], (byte)w["partsDensity"], (byte)w["medicineDensity"], (byte)partySize)
             : WorldEconomySettings.FromPreset(preset, HumanLimit);
+        if (overrideDensities && Saves.IsLoadedWorld)
+        {
+            // Continued worlds take the networked economy from the selected save service.
+            AccessTools.PropertySetter(typeof(GameSaveService), nameof(GameSaveService.LoadedEconomySettings))
+                .Invoke(Saves, new object[] { economy });
+        }
         detail = "Creating EOS lobby and loading world";
         lobby.CreateGameWithLobby(new LobbyCreateOptions {
             LobbyName = (string)Settings["lobby"]["name"], MaxPlayers = (uint)(HumanLimit + 1),
@@ -183,6 +192,8 @@ public sealed class Plugin : BaseUnityPlugin
                 if ((bool)AccessTools.Field(typeof(GameSaveService), "_restoreFailed").GetValue(Saves) ||
                     (int)AccessTools.Field(typeof(GameSaveService), "_restoreSkippedCount").GetValue(Saves) > 0)
                     throw new Exception("World restoration failed; saves and server readiness blocked.");
+                var loot = world.WorldSettings;
+                Logger.LogInfo($"World loot density (food/water/fuel/parts/medicine): {loot.FoodDensity}/{loot.WaterDensity}/{loot.FuelDensity}/{loot.PartsDensity}/{loot.MedicineDensity}; party size {loot.PartySize}.");
                 ready = true;
                 detail = "World ready";
                 Logger.LogInfo("Server ready; join code " + ((IEOSLobbyManager)lobby).JoinCode);

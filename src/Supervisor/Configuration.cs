@@ -119,6 +119,7 @@ public sealed class WorldConfig
     public string Name { get; set; } = "Server World";
     public int Seed { get; set; }
     public string Preset { get; set; } = "Normal";
+    public bool OverrideLootDensities { get; set; }
     public int FoodDensity { get; set; } = 100;
     public int WaterDensity { get; set; } = 100;
     public int FuelDensity { get; set; } = 100;

@@ -40,7 +40,8 @@ and stops the servers registered in the panel. See [Windows panel operations](do
   joining. See the [public lobby example](docs/CONFIG.md#public-lobbies).
 - Creates a new world or imports a copy of an existing save slot. Restarts select
   the same saved slot. Seed and economy settings from an existing world take
-  precedence over new-world configuration.
+  precedence by default. Enable `world.overrideLootDensities` to apply the five
+  configured densities to the saved world on the next full start.
 - Optional backups every 30 minutes, retaining 48 archives by default. The
   plugin awaits a successful save and creates an immutable snapshot; the
   supervisor verifies the ZIP before retiring older archives.

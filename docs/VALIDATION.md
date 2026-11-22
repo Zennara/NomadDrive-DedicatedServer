@@ -1,5 +1,7 @@
 # Validation
 
+Preview 0.5.0.12: An isolated continued slot retained densities 25/200/75/125/150 by default. With the override enabled it loaded 55/65/85/95/105, retained party size 1, saved gracefully, and resumed the new values with the override disabled. Exact drop rates, a full POI restock and remote vanilla-client gameplay remain unverified. See docs/PANEL.md for panel operations.
+
 Status: preview 0.3.3.7. The supervisor suite passes 44 checks, including descriptive
 public lobby names with the Nomad preset and uncertain
 late shutdown exits not being treated as crash-restart permission. Host and CLI

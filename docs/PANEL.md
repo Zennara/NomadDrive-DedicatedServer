@@ -12,7 +12,7 @@ Run `scripts/install-panel.ps1 -SourceDirectory artifacts/cli` to install for th
 | --- | --- |
 | Server | Start or attach, see live status, lobby code and online players, send chat announcements, save, create a backup, restart, or stop after a save. Older hosts supply a player count only. An unavailable heartbeat is displayed as unknown occupancy. |
 | Mods | Inspect the configured runtime's BepInEx plugins. While stopped, install a managed DLL or ZIP containing one plugin under `BepInEx/plugins`, or enable and disable a plugin and its companion files together. The panel protects the hosting plugin. Packages with additional runtime installation steps require manual installation. Existing packages are never overwritten. |
-| Settings | Edit startup settings, import a copied save into an unused profile data directory, and set sign-in preferences. World generation settings apply when a new world is created. |
+| Settings | Edit startup settings, import a copied save into an unused profile data directory, and set sign-in preferences. Enable Override Loot Densities to apply all five density settings to an existing world on its next full start. |
 | Logs | Read the most recent supervisor, game or BepInEx log output for the selected profile. |
 
 **Edit config** on the Server view opens the startup settings, even while the server is online. Settings take effect after a full **Stop** and **Start**. Stop the server before changing its data or runtime directory.
